@@ -41,7 +41,6 @@ dev = ["pytest>=8.0", "ruff>=0.6", "matplotlib>=3.8", "build>=1.2", "twine>=5.0"
 [project.urls]
 Homepage = "https://github.com/rssr25/system-one-bench"
 Documentation = "https://github.com/rssr25/system-one-bench/blob/main/docs/SPEC_v2.md"
-Results = "https://github.com/rssr25/system-one-bench/blob/main/docs/RESULTS_2026-09-22_narrative.md"
 Issues = "https://github.com/rssr25/system-one-bench/issues"
 Changelog = "https://github.com/rssr25/system-one-bench/blob/main/CHANGELOG.md"
 

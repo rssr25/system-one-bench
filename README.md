@@ -9,7 +9,6 @@
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
   <img alt="Tests" src="https://img.shields.io/badge/tests-31%20passing-brightgreen">
   <img alt="Status" src="https://img.shields.io/badge/status-alpha-orange">
-  <a href="docs/RESULTS_2026-09-22_narrative.md"><img alt="Results" src="https://img.shields.io/badge/results-Jev%201.13%20%7C%20Laya%200.3-4F46E5"></a>
 </p>
 
 **sys1bench** benchmarks *System One decision models*: non-autoregressive models that read a block of state plus typed questions (`choice`, `score`, `noul`) and return a calibrated probability distribution in one forward pass, instead of generating text. The first two such models are TypeSafe's hosted **Jev** and Convai's open-weight **Laya**; the harness is model-agnostic so the next ones plug in through an adapter or a YAML file.
@@ -99,16 +98,11 @@ Capability limits are declared, then measured: a request outside them is recorde
 | **I** Decision value | What does calibration buy downstream? | cost per 10k decisions under argmax / Bayes / escalate policies from the manifests' cost matrices |
 | Audits | Is the benchmark itself sound? | state-only / options-only short circuits, leakage, positional bias, label-noise control |
 
-## First results
+## Results
 
-Jev 1.13.0 and Laya 0.3.4 (english and typed-decisions) on identical Tier G manifests, n=500, 22 September 2026. Findings F1 to F9 with caveats: [`docs/RESULTS_2026-09-22_narrative.md`](docs/RESULTS_2026-09-22_narrative.md); generated tables: [`docs/RESULTS_2026-09-22.md`](docs/RESULTS_2026-09-22.md).
-
-<p align="center">
-  <img src="docs/figures/framing_tickets_priority.png" alt="accuracy across framings, ticket priority" width="46%">
-  <img src="docs/figures/reliability_tickets_priority.png" alt="reliability diagram, ticket priority" width="36%">
-</p>
-
-Headline: both models saturate the easy choice and noul questions; the policy-following `score` questions are where they separate. Jev is more accurate on every choice and noul question, reads lookup tables and numbered policies at 1.00, is language-independent, and keeps answers independent of co-asked questions, but it is strongly over-confident on scores (refit temperature 3.8 to 4.1), its ticket-priority accuracy moves from 0.39 to 0.53 with wording alone, and under a 20:1 cost matrix acting on its probabilities is *worse* than argmax. Laya is under-confident on scores, beats Jev on 4-level urgency (typed-decisions 0.79 vs 0.48), has a cleaner out-of-scope signal, but collapses with option count, on JSON records, on Devanagari, and under negation, and its latency grows linearly with batched questions. A fine-tuned DistilBERT trained on a disjoint seed scores 1.00 on every question, so every current label is learnable from surface features; the System One models' failures are failures to apply stated policies zero-shot. Sixteen findings with numbers are in the narrative.
+Live evaluations of Jev 1.13.0 and Laya 0.3.4 on identical generated manifests have been run with this harness; the
+generated tables, dashboard and write-up are not part of this repository. Run `sys1bench suite all` on a model of your
+choice to reproduce the same tables for it.
 
 ## Documentation
 
