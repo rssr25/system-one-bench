@@ -121,8 +121,9 @@ class JevTypeSafeAdapter(BaseAdapter):
                         except ValueError:
                             pass
                     raise httpx.HTTPStatusError(f"{r.status_code}: {r.text[:200]}", request=r.request, response=r)
-                if r.status_code == 422:
-                    raise ValueError(f"422 validation: {r.text[:500]}")
+                if 400 <= r.status_code < 500 and r.status_code != 429:
+                    # request rejected (400 over the 32k state limit, 413, 422 malformed): never retry, classify as vendor rejection
+                    raise ValueError(f"{r.status_code} rejected: {r.text[:300]}")
                 r.raise_for_status()
                 return r.json(), ms, dict(r.headers)
             except (httpx.TransportError, httpx.HTTPStatusError) as e:
@@ -140,7 +141,7 @@ class JevTypeSafeAdapter(BaseAdapter):
         try:
             data, ms, headers = self._post(body)
         except Exception as e:
-            kind = "validation" if isinstance(e, ValueError) else "transport"
+            kind = "rejected_by_vendor" if isinstance(e, ValueError) else "transport"
             return DecisionResponse(
                 answers={k: Answer.failed(q, kind) for k, q in request.questions.items()},
                 latency=LatencyRecord(client_ms=float("nan"), route="typesafe", timestamp=time.time()),
