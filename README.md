@@ -62,16 +62,17 @@ sys1bench score preds.jsonl prior.jsonl --out summary.json
 # Jev (hosted, first-party API)
 echo 'TypeSafe_API_KEY=...' > .env
 sys1bench canary jev_typesafe --model jev-1.13.0                        # 200 fixed items; drift baseline
-N=500 PERMS=3 CONC=4 scripts/run_suite_A.sh configs/models/jev_1.13.yaml results/jev
-scripts/run_sweeps.sh configs/models/jev_1.13.yaml results/jev_sweeps results/jev/tickets.jsonl
+sys1bench suite all results/jev --config configs/models/jev_1.13.yaml --n 500 --concurrency 4
 
-# Laya (local)
-scripts/run_suite_A.sh configs/models/laya_en.yaml results/laya_en
-BUDGET=1 scripts/run_sweeps.sh configs/models/laya_en.yaml results/laya_en_sweeps results/jev/tickets.jsonl
+# Laya (local; same manifests as Jev so the comparison is item-for-item)
+sys1bench suite all results/laya --config configs/models/laya_en.yaml --manifests-from results/jev --budget
 
-# Report + plots for everything under results/
-scripts/finalize_results.sh
+# Report, LaTeX tables, HTML dashboard and plots for everything under results/
+sys1bench report results --latex results/tables.tex --html results/dashboard.html
+sys1bench plots results
 ```
+
+`suite` takes any subset of `A C D E F G I` (or `all`) and writes into `results/<name>/` and `results/<name>_sweeps/`; every request is cached, so re-running is free, and a local model that lands on CPU when CUDA was requested aborts and is retried rather than silently measured. The `scripts/` directory keeps shell equivalents.
 
 `results/REPORT.md` contains, per model: the headline table above, ordinal fidelity for `score` questions, the framing table (paraphrases, label-only, with negatives, vague, swapped descriptions), decomposition, control arms and audits, then the sweep tables (cardinality, length, interference, robustness, prior shift, option budget), and cost. `results/plots/` overlays every model on the same reliability, risk-coverage and framing-range axes.
 
@@ -93,6 +94,9 @@ Capability limits are declared, then measured: a request outside them is recorde
 | **C** Scaling | How does it behave with 2 to 255 options, 128 to 32k tokens, and (Laya) option budgets? | accuracy / ECE / latency curves, rejection kinds |
 | **D** Robustness | Distractors, casing, typos, homoglyphs, out-of-scope inputs, prior shift | Δ accuracy, JSD to clean, AUROC of confidence, abstention with vs without the option, P(yes) vs base rate |
 | **E** Interference | Does co-asking other questions change an answer? What does batching cost? | JSD vs alone, flip rate, latency and cost per question vs Q |
+| **F** Ordinal probes | Does `score` behave like an ordinal scale? | monotonicity along severity ladders, 3/5/10-level scale invariance |
+| **G** Noul consistency | Is P(yes) a probability? | complement consistency under negation, choice-vs-noul agreement, threshold portability across tasks |
+| **I** Decision value | What does calibration buy downstream? | cost per 10k decisions under argmax / Bayes / escalate policies from the manifests' cost matrices |
 | Audits | Is the benchmark itself sound? | state-only / options-only short circuits, leakage, positional bias, label-noise control |
 
 ## First results
@@ -117,15 +121,17 @@ Headline: both models saturate the easy choice and noul questions; the policy-fo
 ```
 src/sys1bench/
   schemas.py      manifest v2, DecisionRequest/Response contract, ModelCapabilities
-  adapters/       mock, jev_typesafe, jev_openrouter, laya_local, generic_http, hybrid_router, baselines
+  adapters/       mock, jev_typesafe, jev_openrouter, laya_local, generic_http, hybrid_router, encoder_finetuned, baselines
   metrics/        calibration, selective, ordinal, consistency, robustness, efficiency, decision_value
-  generators/     support_tickets, phishing_email, rag_relevance (paired control arms, regex rules, cost matrices)
+  generators/     support_tickets, phishing_email, rag_relevance, log_triage, policy_compliance, guardrail_intent,
+                  multilingual_tickets (paired control arms, regex rules, cost matrices)
   framing/        paraphrase / criteria expansion, corruption, permutation, short-circuit, decomposition, perturbations, prior shift
   runners/        cached runner (reparse-from-raw), canary, sweeps, robustness
   analysis/       paired bootstrap, McNemar, Holm; audits; decomposition; control arms
   report/         scorecards, results document, plots
   data/           packaged framing sets and the 200-item drift canary
-  cli.py          generate | run | score | canary | sweep-* | interference | robustness | report | plots
+  cli.py          suite | generate | run | score | canary | sweep-* | interference | robustness | noul-consistency |
+                  ordinal-probes | decision-value | hybrid-sweep | report (--latex, --html) | plots
 ```
 
 ## Citing

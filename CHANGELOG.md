@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- `sys1bench suite` orchestrates suites A, C, D, E, F, G, I portably with retries; `report --latex` and `report --html`
+  (self-contained dashboard); sweep figures in `plots`.
+- New suites: F ordinal probes (monotonicity ladders, scale invariance), G noul consistency (complement, choice-vs-noul,
+  threshold portability), I decision value (cost matrices), hybrid threshold sweep; adversarial framings reported as a
+  worst case.
+- New generators: `log_triage`, `policy_compliance`, `guardrail_intent`, `multilingual_tickets`; `support_tickets` 1.1.0
+  adds surface diversity (openers, register, sign-offs, typos); token estimate calibrated against billed tokens.
+- Baselines: fine-tuned encoder (`encoder_finetuned`, trained on a disjoint seed); NLI and encoder baselines run.
+- Laya adapter: lazy single-checkpoint load, strict device check (FatalAdapterError), truncation by estimate,
+  package refusals classified as `rejected_by_model`.
+- `scripts/canary_daily.sh` appends to a drift history and redraws the drift curve.
+
 ## 0.3.0 (2026-09-22)
 
 First installable release.
