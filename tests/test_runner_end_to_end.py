@@ -139,3 +139,31 @@ def test_typesafe_and_laya_parse_shapes():
     ln = laya_parse(n, {"type": "noul", "noul": 0.9707, "confidence": 0.9707, "action": {"act_probability": 1.0}})
     assert ln.argmax == "true" and ln.abstained is False
     assert laya_q(q)["criteria"] == {"a": "A", "b": "b"}
+
+
+def test_sweeps_and_report(tmp_path):
+    from sys1bench.report.results_doc import build_report
+    from sys1bench.runners import write_manifest, write_predictions
+    from sys1bench.runners.sweeps import cardinality_sweep, interference_sweep, length_sweep
+
+    m = get_adapter("mock", skill=0.8)
+    cs = cardinality_sweep(m, [2, 4], n=40)
+    assert set(cs) == {2, 4} and cs[4]["realised_cardinality"] == 4
+    ls = length_sweep(m, [128, 512], n=20)
+    assert ls[512]["state_tokens_mean"] > ls[128]["state_tokens_mean"]
+    items = get_generator("support_tickets", n=30, seed=3).generate()
+    inter = interference_sweep(m, items, "queue", qs=[0, 2, 5])
+    assert set(inter["by_kind"]) == {"relevant", "irrelevant", "adversarial"} and 5 in inter["by_kind"]["irrelevant"]
+    # report over a fake results dir
+    d = tmp_path / "mock"
+    d.mkdir()
+    write_manifest(items, d / "tickets.jsonl")
+    fr = load_framings("data/framings/support_tickets.yaml")
+    rows = run_items(permute_options(expand_framings(items, fr), 2), m, suite="A", arm="main")
+    rows += run_items(strip_state(items), m, arm="state_only") + run_items(strip_options(items), m, arm="options_only")
+    write_predictions(rows, d / "preds_tickets.jsonl")
+    noisy = get_generator("support_tickets", n=40, seed=4, label_noise=0.2).generate()
+    write_manifest(noisy, d / "tickets_noisy.jsonl")
+    write_predictions(run_items(noisy, m, arm="main"), d / "preds_noisy.jsonl")
+    md = build_report([d])
+    assert "Local models" in md and "tickets.queue" in md and "Label-noise control" in md and "Short-circuit audit" in md

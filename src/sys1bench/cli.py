@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Optional
 
 import typer
 import yaml
@@ -124,3 +125,76 @@ def canary(adapter: str, model: str | None = None, manifest: Path = Path("data/c
 
 if __name__ == "__main__":
     app()
+
+
+@app.command("sweep-cardinality")
+def sweep_cardinality(out: Path, adapter: Optional[str] = None, model: Optional[str] = None, config: Optional[Path] = None,
+                      ks: str = "2,4,6,8,10,12", n: int = 300, seed: int = 42, cache: Path = Path("cache.sqlite"), concurrency: int = 1):
+    """Suite C: accuracy / ECE-over-floor / latency vs number of options."""
+    from .runners.sweeps import cardinality_sweep
+
+    ad = _adapter_from(adapter, model, str(config) if config else None)
+    res = cardinality_sweep(ad, [int(k) for k in ks.split(",")], n=n, seed=seed, cache=ResponseCache(cache), concurrency=concurrency)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=1, default=str))
+    for k, v in res.items():
+        typer.echo(f"K={k:3d} n={v.get('n')} acc={v.get('accuracy', float('nan')):.3f} ECE/floor={v.get('ece_over_floor', float('nan')):.2f} p50={v.get('latency', {}).get('p50', float('nan')):.0f}ms")
+
+
+@app.command("sweep-length")
+def sweep_length(out: Path, adapter: Optional[str] = None, model: Optional[str] = None, config: Optional[Path] = None,
+                 lengths: str = "128,256,512,1024,2048,4096", n: int = 300, seed: int = 42, cache: Path = Path("cache.sqlite"), concurrency: int = 1):
+    """Suite C: accuracy / truncation / latency vs state length in approximate tokens."""
+    from .runners.sweeps import length_sweep
+
+    ad = _adapter_from(adapter, model, str(config) if config else None)
+    res = length_sweep(ad, [int(x) for x in lengths.split(",")], n=n, seed=seed, cache=ResponseCache(cache), concurrency=concurrency)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=1, default=str))
+    for L, v in res.items():
+        q = v["by_question"].get("queue", {})
+        typer.echo(f"L={L:5d} tokens~{v['state_tokens_mean']:.0f} queue acc={q.get('accuracy', float('nan')):.3f} trunc={q.get('truncation_rate', float('nan')):.2f} err={q.get('error_rate', float('nan')):.2f} p50={q.get('latency', {}).get('p50', float('nan')):.0f}ms")
+
+
+@app.command("sweep-budget")
+def sweep_budget(out: Path, budgets: str = "64,128,192,256,384,512", k: int = 12, n: int = 300, seed: int = 42,
+                 checkpoint: str = "english", max_len: int = 1024, device: str = "cuda", cache: Path = Path("cache.sqlite")):
+    """Suite C (Laya): accuracy at fixed K as the option token budget head_max_len grows."""
+    from .runners.sweeps import budget_sweep
+
+    def factory(b: int):
+        return get_adapter("laya_local", checkpoint=checkpoint, head_max_len=b, max_len=max_len, device=device)
+
+    res = budget_sweep(factory, [int(b) for b in budgets.split(",")], k=k, n=n, seed=seed, cache=ResponseCache(cache))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=1, default=str))
+    for b, v in res.items():
+        typer.echo(f"head_max_len={b:4d} (~{v['tokens_per_option_approx']:.0f} tok/option) acc={v.get('accuracy', float('nan')):.3f} ECE/floor={v.get('ece_over_floor', float('nan')):.2f}")
+
+
+@app.command()
+def interference(manifest: Path, out: Path, target: str = "queue", adapter: Optional[str] = None, model: Optional[str] = None,
+                 config: Optional[Path] = None, qs: str = "2,5,10,20", limit: int = 300, cache: Path = Path("cache.sqlite"), concurrency: int = 1):
+    """Suite E: does co-asking other questions change the target question's answer?"""
+    from .runners.sweeps import interference_sweep
+
+    ad = _adapter_from(adapter, model, str(config) if config else None)
+    items = load_manifest(manifest)[:limit]
+    res = interference_sweep(ad, items, target, qs=[0] + [int(q) for q in qs.split(",")], cache=ResponseCache(cache), concurrency=concurrency)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=1, default=str))
+    typer.echo(f"alone: acc={res['alone'].get('accuracy', float('nan')):.3f}")
+    for kind, d in res["by_kind"].items():
+        for Q, v in d.items():
+            typer.echo(f"{kind:11s} Q={Q:2d} JSD={v['mean_jsd_vs_alone']:.4f} flips={v['argmax_flip_rate']:.3f} dAcc={v['accuracy_delta_vs_alone']:+.3f} p50={v['latency_p50_ms']:.0f}ms cost/q={v['cost_per_question_usd']}")
+
+
+@app.command()
+def report(results_dir: Path, out: Optional[Path] = None, title: str = "sys1bench results"):
+    """Build the markdown results report for one or more model result directories (hosted and local kept apart)."""
+    from .report.results_doc import build_report
+
+    md = build_report([results_dir] if (results_dir / "preds_tickets.jsonl").exists() else sorted(p for p in results_dir.iterdir() if p.is_dir()), title=title)
+    out = out or (results_dir / "REPORT.md")
+    out.write_text(md)
+    typer.echo(f"wrote {out}")

@@ -74,7 +74,9 @@ def flatten(item: TaskItem, resp, adapter: BaseAdapter, suite: str | None, arm: 
             adapter_id=adapter.adapter_id, model_id=resp.provider.model_id_returned or adapter.model_id,
             version_hash=resp.provider.version_hash, suite=suite, arm=arm,
             metadata={"decomposition_of": q.decomposition_of, "capability_issues": adapter.check_request(to_request(item)),
-                      "generation_id": resp.provider.generation_id, "route": resp.provider.route},
+                      "generation_id": resp.provider.generation_id, "route": resp.provider.route,
+                      "hardware": resp.provider.hardware, "noise_injected": item.label_provenance.noise_injected,
+                      "unknowable": item.controls.unknowable, "billed_input_tokens": resp.provider.billed_input_tokens},
         ))
     return rows
 
