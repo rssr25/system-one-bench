@@ -141,3 +141,28 @@ def interference_heatmap(res: dict[str, Any], out: Path, metric: str = "mean_jsd
     fig.savefig(out, dpi=160)
     plt.close(fig)
     return out
+
+
+def multi_line_plot(series: dict[str, list[tuple[float, float]]], out: Path, xlabel: str, ylabel: str, title: str = "",
+                    xlog: bool = False, ylim: tuple[float, float] | None = None) -> Path:
+    """Several named series on one axis; used for cross-model sweep comparisons in the README."""
+    plt = _plt()
+    fig, ax = plt.subplots(figsize=(5.2, 3.4))
+    for name, pts in series.items():
+        pts = sorted(p for p in pts if p[1] == p[1])
+        if pts:
+            ax.plot([p[0] for p in pts], [p[1] for p in pts], marker="o", ms=4, lw=1.6, label=name)
+    if xlog:
+        ax.set_xscale("log")
+    if ylim:
+        ax.set_ylim(*ylim)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title, fontsize=10)
+    ax.grid(alpha=0.25)
+    ax.legend(fontsize=7, frameon=False)
+    fig.tight_layout()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=170)
+    plt.close(fig)
+    return out

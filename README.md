@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="sys1bench" width="520">
+  <img src="docs/assets/logo.svg" alt="sys1bench" width="480">
 </p>
 
 <p align="center">
@@ -7,131 +7,59 @@
   <a href="https://pypi.org/project/sys1bench/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/sys1bench?color=06B6D4&logo=python&logoColor=white&cacheSeconds=3600"></a>
   <a href="https://github.com/rssr25/system-one-bench/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/rssr25/system-one-bench/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-31%20passing-brightgreen">
-  <img alt="Status" src="https://img.shields.io/badge/status-alpha-orange">
 </p>
 
-**sys1bench** benchmarks *System One decision models*: non-autoregressive models that read a block of state plus typed questions (`choice`, `score`, `noul`) and return a calibrated probability distribution in one forward pass, instead of generating text. The first two such models are TypeSafe's hosted **Jev** and Convai's open-weight **Laya**; the harness is model-agnostic so the next ones plug in through an adapter or a YAML file.
-
-It answers the questions a vendor scorecard does not: whether the model beats trivial baselines on the same items, whether its accuracy depends on how the question is worded, whether its probabilities mean anything and in which direction they are wrong, whether confidence can gate actions, how it degrades with option count, state length, noise and out-of-scope inputs, whether batching questions changes answers or only cost, and what all of it costs per 100k decisions.
+<p align="center"><b>A benchmark for typed System One decision models</b><br>
+Jev · Laya · Kev · and whatever comes next</p>
 
 ---
 
-## Why another benchmark
+System One models read a block of state plus typed questions and return a probability distribution over the answers you defined — one of N options, a level on an ordinal scale, or yes/no — in a single forward pass. No text is generated, so nothing has to be parsed. **sys1bench** measures what that buys: whether the probabilities are calibrated (against a noise floor), how much the answer depends on how the question is worded, how confidence behaves out of scope, how accuracy scales with options and state length, whether batched questions interfere, and what it all costs per decision. Headline numbers come from generated items whose labels follow a stated policy, so they cannot be memorised.
 
-| Existing practice | sys1bench |
+```bash
+pip install sys1bench
+sys1bench suite all results/my-model --config my_model.yaml        # A–I on generated, policy-labelled data
+sys1bench report results --html results/dashboard.html            # tables + interactive dashboard
+```
+
+## Results at a glance
+
+<p align="center">
+  <img src="docs/figures/framing_tickets_priority.png" alt="Accuracy across question wordings on the policy-following priority score" width="49%">
+  <img src="docs/figures/reliability_tickets_priority.png" alt="Reliability diagram, priority score, all models" width="41%">
+</p>
+<p align="center">
+  <img src="docs/figures/cardinality_accuracy.png" alt="Exact accuracy versus number of options" width="45%">
+  <img src="docs/figures/latency_vs_questions.png" alt="Median latency versus number of questions per request" width="45%">
+</p>
+
+<p align="center"><sub>Jev 1.13.0 (hosted) and Laya 0.3.4 (local, GB10) on identical generated manifests, n = 500, September 2026. Left to right: accuracy across five paraphrases and criteria variants of the same question (red = canonical wording); reliability on the same question; accuracy as the option count grows from 2 to 255; median latency as more questions share one request. Hosted latency includes the network path and is not comparable to local compute time.</sub></p>
+
+## Why this benchmark
+
+| | |
 |---|---|
-| Public datasets the models may have trained on | Generated items whose label follows a **stated policy** the model must apply, plus paired control arms (unknowable, label-noise, distractor, none-of-the-above) |
-| One accuracy number per task | Accuracy as the **median over five paraphrases and three criteria variants**, with the range shown |
-| Raw ECE at one binning | ECE **divided by its resampled noise floor**, smooth CE, Brier decomposition, clipped NLL, quantisation report, per-half temperature refit |
-| Hosted and local latency on one axis | Separate sections; device recorded on every row; a local model that lands on CPU when CUDA was requested **aborts the run** |
-| Seeds as the unit of variance | Item-level paired bootstrap, McNemar, cluster bootstrap over framing groups |
-| Silent fixes | Renormalisation, truncation, abstention and vendor rejections are **recorded as rates**, never patched over |
+| **Policy-labelled data** | Labels follow a rule stated in the question (e.g. *urgency + 1 if angry + 1 if premium tier, cap 4*). A regex cannot solve it; neither can memorised public sets. Control arms are paired item-for-item: unknowable, label-noise, distractor, none-of-the-above. |
+| **Calibration relative to noise** | Every ECE is divided by the ECE a perfectly calibrated model would show on that sample. Brier decomposition, clipped NLL, per-primitive temperature refit, quantisation report. |
+| **Wording as a factor** | Accuracy is the median over five paraphrases and three criteria variants, with the range shown; adversarial wordings reported as a worst case. |
+| **Selective prediction and cost** | Risk–coverage, coverage at 5 % risk, abstention with and without an explicit option, and realised cost per 10 k decisions under argmax, Bayes and escalate policies from per-question cost matrices. |
+| **Ordinal, not categorical** | MAE, weighted kappa, ranked probability score, monotonicity along controlled severity ladders, 3/5/10-level scale invariance. |
+| **Honest infrastructure** | Hosted and local latency never share an axis; the serving device is recorded on every row; a local model that lands on CPU when CUDA was requested aborts the run; every response is cached and re-derivable offline. |
 
-## Install
+## Add your model
 
-```bash
-pip install sys1bench                 # core: numpy, scipy, pandas, pydantic, httpx, typer
-pip install "sys1bench[plots]"        # + matplotlib for reliability / risk-coverage / framing plots
-pip install "sys1bench[laya]"         # + the laya package (needs torch; GPU recommended)
-pip install "sys1bench[local]"        # + torch, transformers, sentence-transformers baselines
-```
-
-From source: `git clone https://github.com/rssr25/system-one-bench && cd system-one-bench && uv pip install -e ".[dev]"`.
-
-## Quickstart (offline, two minutes)
+A hosted model with a conventional JSON decisions API needs a config file, no code:
 
 ```bash
-sys1bench generate support_tickets tickets.jsonl --n 200 --seed 42
-sys1bench run tickets.jsonl preds.jsonl --adapter mock --framings support_tickets --permutations 3 --corruption --short-circuit
-sys1bench run tickets.jsonl prior.jsonl --adapter majority_prior
-sys1bench score preds.jsonl prior.jsonl --out summary.json
+sys1bench configs example_future_vendor > my_model.yaml   # fill in url, auth env var, field names
 ```
 
-```
-| model             | acc (median) | acc range      | ECE/floor | ECE15 | Brier | AURC  | cov@5% | T     | perm JSD | p50 ms |
-|-------------------|--------------|----------------|-----------|-------|-------|-------|--------|-------|----------|--------|
-| mock-v1 / queue   | 0.783        | [0.783, 0.795] | 2.736     | 0.124 | 0.387 | 0.214 | 0.000  | 1.070 | 0.182    | 5.9    |
-| mock-v1 / priority| 0.750        | [0.750, 0.752] | 3.614     | 0.096 | 0.438 | 0.195 | 0.004  | 1.271 | –        | 5.9    |
-```
-
-## Run it on a real model
-
-```bash
-# Jev (hosted, first-party API)
-echo 'TypeSafe_API_KEY=...' > .env
-sys1bench canary jev_typesafe --model jev-1.13.0                        # 200 fixed items; drift baseline
-sys1bench suite all results/jev --config jev_1.13 --n 500 --concurrency 4      # packaged config; `sys1bench configs` lists them
-
-# Laya (local; same manifests as Jev so the comparison is item-for-item)
-sys1bench suite all results/laya --config laya_en --manifests-from results/jev --budget
-
-# Report, LaTeX tables, HTML dashboard and plots for everything under results/
-sys1bench report results --latex results/tables.tex --html results/dashboard.html
-sys1bench plots results
-```
-
-`suite` takes any subset of `A C D E F G I` (or `all`) and writes into `results/<name>/` and `results/<name>_sweeps/`; every request is cached, so re-running is free, and a local model that lands on CPU when CUDA was requested aborts and is retried rather than silently measured. The `scripts/` directory keeps shell equivalents.
-
-`results/REPORT.md` contains, per model: the headline table above, ordinal fidelity for `score` questions, the framing table (paraphrases, label-only, with negatives, vague, swapped descriptions), decomposition, control arms and audits, then the sweep tables (cardinality, length, interference, robustness, prior shift, option budget), and cost. `results/plots/` overlays every model on the same reliability, risk-coverage and framing-range axes.
-
-### Adding your model
-
-| Your model | What to do |
-|---|---|
-| Hosted, conventional JSON decisions API | `sys1bench configs example_future_vendor > my_model.yaml`, fill in URL, auth env var and field names, run with `--config my_model.yaml`. No code. |
-| Anything else | Subclass `BaseAdapter`: declare `capabilities` (primitives, max options, state tokens, native abstain, batching) and implement `decide` (state + typed questions in, one probability vector per question out). Register with `@register("my_model")` or the `sys1bench.adapters` entry-point group from your own package. |
-
-Capability limits are declared, then measured: a request outside them is recorded as a `capability_issue` or `rejected_by_vendor` row, never a crash.
-
-## Suites
-
-| Suite | Question it answers | Key outputs |
-|---|---|---|
-| **A** Calibration & selective prediction | Do the probabilities mean what they say? Can confidence gate actions? | ECE/floor, smooth CE, Brier, NLL, temperature refit, AURC, coverage@risk, abstention, unknowable arm |
-| **B** Framing sensitivity | Is the accuracy a property of the model or of the wording? | median [min, max] over paraphrases, criteria variants, corruption drop, decomposition gain |
-| **C** Scaling | How does it behave with 2 to 255 options, 128 to 32k tokens, and (Laya) option budgets? | accuracy / ECE / latency curves, rejection kinds |
-| **D** Robustness | Distractors, casing, typos, homoglyphs, out-of-scope inputs, prior shift | Δ accuracy, JSD to clean, AUROC of confidence, abstention with vs without the option, P(yes) vs base rate |
-| **E** Interference | Does co-asking other questions change an answer? What does batching cost? | JSD vs alone, flip rate, latency and cost per question vs Q |
-| **F** Ordinal probes | Does `score` behave like an ordinal scale? | monotonicity along severity ladders, 3/5/10-level scale invariance |
-| **G** Noul consistency | Is P(yes) a probability? | complement consistency under negation, choice-vs-noul agreement, threshold portability across tasks |
-| **I** Decision value | What does calibration buy downstream? | cost per 10k decisions under argmax / Bayes / escalate policies from the manifests' cost matrices |
-| Audits | Is the benchmark itself sound? | state-only / options-only short circuits, leakage, positional bias, label-noise control |
-
-## Results
-
-Live evaluations of Jev 1.13.0 and Laya 0.3.4 on identical generated manifests have been run with this harness; the
-generated tables, dashboard and write-up are not part of this repository. Run `sys1bench suite all` on a model of your
-choice to reproduce the same tables for it.
+Anything else subclasses `BaseAdapter` (declare capabilities, implement `decide`) and registers with `@register("my_model")` or the `sys1bench.adapters` entry-point group from your own package. Kev, which speaks the TypeSafe API, runs with `--config kev_4b` and no code at all.
 
 ## Documentation
 
-- [`docs/SPEC_v2.md`](docs/SPEC_v2.md): the benchmark specification (contract, data tiers, suites, statistics, audits, future-model rules)
-- [`docs/REVIEW_v1.md`](docs/REVIEW_v1.md): review of the original plan against the public state of the art
-- [`CHANGELOG.md`](CHANGELOG.md)
+- [Specification](docs/SPEC_v2.md) — contract, data tiers, suites A–I, statistics, audits, rules for future models
+- [Design review](docs/REVIEW_v1.md) — how the design was derived from the public state of the art
+- [Changelog](CHANGELOG.md) · [Issues](https://github.com/rssr25/system-one-bench/issues)
 
-## Layout
-
-```
-src/sys1bench/
-  schemas.py      manifest v2, DecisionRequest/Response contract, ModelCapabilities
-  adapters/       mock, jev_typesafe, jev_openrouter, laya_local, generic_http, hybrid_router, encoder_finetuned, baselines
-  metrics/        calibration, selective, ordinal, consistency, robustness, efficiency, decision_value
-  generators/     support_tickets, phishing_email, rag_relevance, log_triage, policy_compliance, guardrail_intent,
-                  multilingual_tickets (paired control arms, regex rules, cost matrices)
-  framing/        paraphrase / criteria expansion, corruption, permutation, short-circuit, decomposition, perturbations, prior shift
-  runners/        cached runner (reparse-from-raw), canary, sweeps, robustness
-  analysis/       paired bootstrap, McNemar, Holm; audits; decomposition; control arms
-  report/         scorecards, results document, plots
-  data/           packaged framing sets and the 200-item drift canary
-  cli.py          suite | generate | run | score | canary | sweep-* | interference | robustness | noul-consistency |
-                  ordinal-probes | decision-value | hybrid-sweep | report (--latex, --html) | plots
-```
-
-## Citing
-
-If you use sys1bench, please cite the repository and the results document with the model versions and date; the vendor models move, so the version string returned by the provider is part of every row.
-
-## License
-
-Apache 2.0. Generated data, framing sets and results are released under the same license.
+<p align="center"><sub>Apache 2.0 · Rahul Sharma · numbers change with model versions, so every row carries the version string the provider returned</sub></p>
