@@ -91,3 +91,20 @@ def test_control_arms_pair_with_clean_manifest():
                     assert ca.startswith(cc[:60])
             else:
                 assert any(a.label_provenance.noise_injected for a in arm)
+
+
+def test_new_generators_valid_and_paired():
+    for name in ("log_triage", "policy_compliance", "guardrail_intent", "multilingual_tickets"):
+        a = get_generator(name, n=40, seed=2).generate()
+        assert len(a) == 40 and all(q.ground_truth is not None for it in a for q in it.questions.values())
+        b = get_generator(name, n=40, seed=2).generate()
+        assert [x.model_dump_json() for x in a] == [x.model_dump_json() for x in b]
+    logs = get_generator("log_triage", n=100, seed=1).generate()
+    for it in logs:
+        lvl = it.state["log"]["level"]
+        assert it.questions["severity"].ground_truth == {"INFO": 0, "WARN": 1, "ERROR": 2, "CRITICAL": 3}[lvl]
+        assert it.questions["page_oncall"].ground_truth == (it.questions["severity"].ground_truth >= 2 and it.state["log"]["env"] == "production")
+    pol = get_generator("policy_compliance", n=100, seed=1).generate()
+    assert any(it.questions["violated_clause"].ground_truth == "none" for it in pol) and any(it.questions["violated_clause"].ground_truth != "none" for it in pol)
+    ml = get_generator("multilingual_tickets", n=8, seed=1).generate()
+    assert {it.language for it in ml} == {"de", "es", "fr", "hi"}

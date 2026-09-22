@@ -259,5 +259,92 @@ def plots(results_dir: Path, out: Optional[Path] = None, questions: str = "ticke
     typer.echo(f"plots in {out}")
 
 
+
+@app.command("noul-consistency")
+def noul_consistency(manifest: Path, out: Path, key: str = "is_angry", adapter: Optional[str] = None, model: Optional[str] = None,
+                     config: Optional[Path] = None, limit: int = 300, cache: Path = Path("cache.sqlite"), concurrency: int = 1,
+                     portability_manifest: Optional[Path] = None):
+    """Suite G: complement consistency, choice-vs-noul agreement, threshold portability (to a second manifest)."""
+    from .runners.noul_consistency import choice_vs_noul, complement_test, threshold_portability
+
+    ad = _adapter_from(adapter, model, str(config) if config else None)
+    items = load_manifest(manifest)[:limit]
+    fr_name = items[0].questions[key].framing_group
+    negs = None
+    for name in ("support_tickets", "phishing_email"):
+        try:
+            spec = load_framings(framings_path(name)).get(fr_name or "", {})
+        except FileNotFoundError:
+            spec = {}
+        if spec.get("negations"):
+            negs = spec["negations"]
+    c = ResponseCache(cache)
+    res = {"complement": complement_test(ad, items, key, negs, c, concurrency), "choice_vs_noul": choice_vs_noul(ad, items, key, c, concurrency)}
+    if portability_manifest:
+        other = load_manifest(portability_manifest)[:limit]
+        okey = next((k for k, q in other[0].questions.items() if q.type == "noul"), None)
+        if okey:
+            ra = [r for r in run_items([_only(it, key) for it in items], ad, c, suite="G", arm="port_a", concurrency=concurrency)]
+            rb = [r for r in run_items([_only(it, okey) for it in other], ad, c, suite="G", arm="port_b", concurrency=concurrency)]
+            res["threshold_portability"] = {"from": f"{manifest.name}:{key}", "to": f"{portability_manifest.name}:{okey}", **threshold_portability(ra, rb)}
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=1, default=str))
+    typer.echo(json.dumps(res, indent=1, default=str)[:2500])
+
+
+def _only(item, key):
+    import copy
+
+    b = copy.deepcopy(item)
+    b.questions = {key: item.questions[key]}
+    return b
+
+
+@app.command("decision-value")
+def decision_value(predictions: Path, manifest: Path, out: Path, escalate_cost: Optional[float] = None):
+    """Suite I: realised cost per 10k decisions under argmax / Bayes / escalate policies using the manifest's cost matrices."""
+    from .analysis.decision_value import decision_value_report
+
+    rows = [r for r in load_predictions(predictions) if r.arm in (None, "main")]
+    res = decision_value_report(rows, load_manifest(manifest), escalate_cost)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=1, default=str))
+    for k, v in res.items():
+        typer.echo(f"{k:14s} n={v['n']} cost/10k: argmax {v['argmax']['cost_per_10k']:.0f}  bayes {v['bayes']['cost_per_10k']:.0f}  "
+                   f"escalate@0.7 {v['escalate@0.7']['cost_per_10k']:.0f} (esc {v['escalate@0.7']['escalation_rate']:.2f})  prior {v['majority_prior_bayes']['cost_per_10k']:.0f}  "
+                   f"value of calibration/10k {v['value_of_calibration_per_10k']:+.0f}")
+
+
+@app.command("ordinal-probes")
+def ordinal_probes_cmd(out: Path, adapter: Optional[str] = None, model: Optional[str] = None, config: Optional[Path] = None,
+                       cache: Path = Path("cache.sqlite"), concurrency: int = 1):
+    """Suite F: monotonicity ladders and 3/5/10-level scale invariance for `score`."""
+    from .runners.ordinal_probes import ordinal_probes
+
+    ad = _adapter_from(adapter, model, str(config) if config else None)
+    res = ordinal_probes(ad, ResponseCache(cache), concurrency)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=1, default=str))
+    for L, v in res["by_levels"].items():
+        typer.echo(f"{L:>2} levels: monotone ladders {v['monotonicity_rate']:.2f}  exact {v['exact_accuracy']:.2f}  E[level] by severity {[round(x, 2) for x in v['mean_expected_by_severity']]}")
+    typer.echo("scale invariance: " + json.dumps(res["scale_invariance"]))
+
+
+@app.command("hybrid-sweep")
+def hybrid_sweep(primary_preds: Path, fallback_preds: Path, out: Path, thresholds: str = "0.5,0.6,0.7,0.8,0.9,0.95,0.99"):
+    """Accuracy / latency / cost vs escalation rate for 'System One first, escalate below a threshold'."""
+    from .runners.hybrid_sweep import hybrid_curve
+
+    res = hybrid_curve([r for r in load_predictions(primary_preds) if r.arm in (None, "main") and r.permutation_id == "p0" and r.framing_id == "f0"],
+                       [r for r in load_predictions(fallback_preds) if r.arm in (None, "main") and r.permutation_id == "p0" and r.framing_id == "f0"],
+                       tuple(float(t) for t in thresholds.split(",")))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=1, default=str))
+    typer.echo(f"primary only: {res.get('primary_only')}")
+    typer.echo(f"fallback only: {res.get('fallback_only')}")
+    for t, v in res.get("curve", {}).items():
+        typer.echo(f"t={t:<5} esc={v['escalation_rate']:.2f} acc={v['accuracy']:.3f} p50={v['p50_ms']:.0f}ms cost/100k=${v['cost_per_100k']:.2f}")
+
+
 if __name__ == "__main__":
     app()

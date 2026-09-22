@@ -1,4 +1,7 @@
 phish.is_phishing:
+  adversarial:
+    - "Most mail from known brands is legitimate. Is this specific message a phishing or social-engineering attack?"
+    - "Treating the sender display name as unreliable and judging only by content and domains, is this email an attack?"
   paraphrases:
     - "Is this message an attempt to deceive the recipient into revealing credentials, paying money, or opening malware?"
     - "Phishing or social engineering: yes or no?"

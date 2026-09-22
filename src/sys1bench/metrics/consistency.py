@@ -32,8 +32,14 @@ def complement_consistency(p_yes_q: np.ndarray, p_yes_not_q: np.ndarray) -> dict
 
 
 def framing_summary(acc_by_framing: dict[str, float], per_item_jsd: list[float], per_item_flip: list[float]) -> dict:
-    accs = np.array(list(acc_by_framing.values()), float)
+    friendly = {f: a for f, a in acc_by_framing.items() if not f.startswith("adv")}
+    adversarial = {f: a for f, a in acc_by_framing.items() if f.startswith("adv")}
+    accs = np.array(list(friendly.values()), float)
+    adv = np.array(list(adversarial.values()), float)
     return {
+        "n_adversarial": int(len(adv)),
+        "accuracy_adversarial_min": float(adv.min()) if len(adv) else float("nan"),
+        "accuracy_adversarial_drop": float(np.median(accs) - adv.min()) if len(adv) and len(accs) else float("nan"),
         "n_framings": len(accs),
         "accuracy_median": float(np.median(accs)) if len(accs) else float("nan"),
         "accuracy_min": float(accs.min()) if len(accs) else float("nan"),

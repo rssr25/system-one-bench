@@ -244,3 +244,32 @@ def test_fatal_adapter_error_is_not_swallowed():
     items = get_generator("support_tickets", n=2, seed=1).generate()
     with pytest.raises(FatalAdapterError):
         run_items(items, Broken())
+
+
+def test_suites_g_i_f_hybrid_offline(tmp_path):
+    from sys1bench.analysis.decision_value import decision_value_report
+    from sys1bench.runners.hybrid_sweep import hybrid_curve
+    from sys1bench.runners.noul_consistency import choice_vs_noul, complement_test, threshold_portability
+    from sys1bench.runners.ordinal_probes import ordinal_probes
+
+    items = get_generator("support_tickets", n=40, seed=3).generate()
+    m = get_adapter("mock", skill=0.85)
+    c = complement_test(m, items, "is_angry")
+    assert c["n"] == 40 and "complement_mad" in c["negations"][0]
+    cv = choice_vs_noul(m, items, "is_angry")
+    assert cv["n"] == 40 and 0 <= cv["mean_jsd"] <= 1
+    rows = run_items(items, m, arm="main")
+    port = threshold_portability([r for r in rows if r.question_key == "is_angry"], [r for r in rows if r.question_key == "is_angry"])
+    assert port["portability_loss"] == pytest.approx(0.0)
+    dv = decision_value_report(rows, items)
+    assert set(dv) >= {"queue", "priority", "is_angry"} and dv["queue"]["argmax"]["cost_per_10k"] >= 0
+    hy = hybrid_curve(rows, run_items(items, get_adapter("mock", skill=1.0, latency_ms=500.0), arm="main"))
+    assert hy["n"] > 0 and hy["curve"][0.99]["escalation_rate"] >= hy["curve"][0.5]["escalation_rate"]
+    probes = ordinal_probes(m)
+    assert set(probes["by_levels"]) == {3, 5, 10} and "3v10" in probes["scale_invariance"]
+    # adversarial framings are expanded and reported separately
+    fr = load_framings(framings_path("support_tickets"))
+    exp = expand_framings(items[:5], fr)
+    assert any(q.framing_id.startswith("adv") for r in exp for q in r.questions.values())
+    card = scorecard([r for r in run_items(exp, m, arm="main") if r.question_key == "priority"], floor_resamples=5)
+    assert card["framing"]["n_adversarial"] >= 3

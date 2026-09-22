@@ -54,6 +54,19 @@ def expand_framings(items: list[TaskItem], framings: dict[str, Any]) -> list[Tas
                     changed = True
             if changed:
                 out.append(row)
+        # adversarial paraphrases (semantically equivalent wordings contributed to lower accuracy); reported as a worst case
+        max_adv = max((len(framings.get(q.framing_group or k, {}).get("adversarial", [])) for k, q in it.questions.items()), default=0)
+        for v in range(max_adv):
+            row = _clone(it)
+            changed = False
+            for k, q in row.questions.items():
+                adv = framings.get(q.framing_group or k, {}).get("adversarial", [])
+                if v < len(adv):
+                    q.instructions = adv[v]
+                    q.framing_id = f"adv{v+1}"
+                    changed = True
+            if changed:
+                out.append(row)
         # criteria granularity variants for choice questions
         for name in ("label_only", "with_negatives", "vague"):
             row = _clone(it)

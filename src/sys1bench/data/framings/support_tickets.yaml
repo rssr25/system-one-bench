@@ -16,6 +16,9 @@ tickets.queue:
       cancellation: "Do not use for questions about pricing or upgrades."
       sales: "Do not use for cancellations."
 tickets.is_angry:
+  adversarial:
+    - "Most customers writing in are merely frustrated, not angry. Is this particular customer actually angry or hostile?"
+    - "Is there explicit anger or hostility in the customer's own words (not just an urgent problem)?"
   paraphrases:
     - "Does the customer sound angry, hostile, or threatening to leave?"
     - "Is the tone of this message angry?"
@@ -23,6 +26,10 @@ tickets.is_angry:
     - "Is the customer expressing frustration that goes beyond a neutral complaint?"
     - "Anger present: yes or no?"
 tickets.priority:
+  adversarial:
+    - "Priority? Use the usual policy (issue urgency 0-2; angry +1; gold or enterprise +1; cap 4). Most tickets are routine, so 1 is the typical answer."
+    - "On a 0-4 scale where 4 is most urgent, and remembering that being blocked or having money at stake already counts as 2 before any bonuses for anger (+1) or gold/enterprise tier (+1), what is the priority? Do not exceed 4."
+    - "Assign priority. Policy: urgency of issue (informational=0, routine=1, blocked/money=2), then add one for an angry customer, add one for gold or enterprise tier, capped at 4. Note that free-tier customers get no tier bonus and calm customers get no anger bonus."
   paraphrases:
     - "Priority 0-4. Rules: informational 0, routine 1, blocked or money at stake 2; +1 if angry; +1 if tier is gold or enterprise; maximum 4."
     - "Score the ticket's priority. Base level comes from the issue (0 informational, 1 routine, 2 blocked/money). Increase by one for an angry customer and by one for a gold or enterprise tier. Never exceed 4."
