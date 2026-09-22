@@ -216,5 +216,37 @@ def robustness(out: Path, adapter: Optional[str] = None, model: Optional[str] = 
         typer.echo(f"distractor {dens:<5} " + "  ".join(f"{q}: dAcc={v['accuracy_delta']:+.3f} JSD={v['jsd_vs_clean']:.4f}" for q, v in d.items()))
 
 
+@app.command()
+def plots(results_dir: Path, out: Optional[Path] = None, questions: str = "tickets.queue,tickets.is_angry,tickets.priority,phish.is_phishing,phish.attack_class,phish.urgency"):
+    """Render reliability diagrams, risk-coverage curves and framing-range charts for every model dir under results_dir."""
+    from .report.plots import framing_range_plot, reliability_diagram, risk_coverage_plot
+    from .report.scorecard import framing_scorecard
+    from .runners.benchmark_runner import load_predictions
+
+    out = out or (results_dir / "plots")
+    dirs = [results_dir] if (results_dir / "preds_tickets.jsonl").exists() else sorted(p for p in results_dir.iterdir() if p.is_dir() and (p / "preds_tickets.jsonl").exists())
+    for spec in questions.split(","):
+        mname, qk = spec.split(".")
+        by_model: dict[str, list] = {}
+        acc_by_model: dict[str, dict[str, float]] = {}
+        for d in dirs:
+            f = d / f"preds_{mname}.jsonl"
+            if not f.exists():
+                continue
+            rows = [r for r in load_predictions(f) if r.question_key == qk and r.arm in (None, "main")]
+            if not rows:
+                continue
+            label = rows[0].model_id
+            by_model[label] = [r for r in rows if r.permutation_id == "p0" and r.framing_id == "f0"]
+            acc_by_model[label] = framing_scorecard(rows)["accuracy_by_framing"]
+        if not by_model:
+            continue
+        reliability_diagram(by_model, out / f"reliability_{mname}_{qk}.png", title=f"{mname}.{qk}: reliability (canonical framing)")
+        risk_coverage_plot(by_model, out / f"risk_coverage_{mname}_{qk}.png", title=f"{mname}.{qk}: risk-coverage")
+        framing_range_plot(acc_by_model, out / f"framing_{mname}_{qk}.png", title=f"{mname}.{qk}: accuracy across framings")
+        typer.echo(f"{spec}: {len(by_model)} models")
+    typer.echo(f"plots in {out}")
+
+
 if __name__ == "__main__":
     app()
