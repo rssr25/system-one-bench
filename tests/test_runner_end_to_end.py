@@ -220,3 +220,13 @@ def test_robustness_suite_mock(tmp_path):
     assert set(res["perturbations"]) == {"upper", "typos_2pct"} and 0.5 in res["distractors"]
     assert res["none_of_the_above"]["n_none"] > 0 and "auroc_confidence" in res["none_of_the_above"]["without_abstain_option"]
     assert set(res["prior_shift"]) == {0.2, 0.5, 0.8}
+
+
+def test_scorecard_dedupes_repeated_sibling_rows():
+    items = get_generator("support_tickets", n=30, seed=2).generate()
+    fr = load_framings("data/framings/support_tickets.yaml")
+    rows = run_items(expand_framings(items, fr), get_adapter("mock", skill=0.8), arm="main")
+    angry = [r for r in rows if r.question_key == "is_angry"]
+    assert len(angry) > 30 * 6  # raw rows include duplicates from queue criteria variants
+    c = scorecard(angry, floor_resamples=10)
+    assert c["calibration"]["n"] == 30

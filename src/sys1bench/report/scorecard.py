@@ -20,6 +20,20 @@ def group_rows(rows: Iterable[PredictionRow], *keys: str) -> dict[tuple, list[Pr
     return dict(out)
 
 
+def _dedupe(rows: Iterable[PredictionRow]) -> list[PredictionRow]:
+    """Framing expansion varies one question at a time, so a noul/score question is repeated verbatim in the rows
+    created for a sibling choice question's criteria variants. Keep one row per (task, question, framing, permutation, arm)."""
+    seen: set[tuple] = set()
+    out = []
+    for r in rows:
+        k = (r.task_id, r.question_key, r.framing_id, r.permutation_id, r.arm)
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(r)
+    return out
+
+
 def _matrix(rows: list[PredictionRow]) -> tuple[np.ndarray, np.ndarray, list[PredictionRow]]:
     ok = [r for r in rows if r.error is None and r.ground_truth is not None and r.ground_truth in r.option_keys]
     if not ok:
@@ -34,7 +48,7 @@ def _matrix(rows: list[PredictionRow]) -> tuple[np.ndarray, np.ndarray, list[Pre
 def scorecard(rows: list[PredictionRow], floor_resamples: int = 200) -> dict[str, Any]:
     """Metrics for a homogeneous set of rows (same model, primitive, question). Framing variance is
     computed across `framing_id`; the headline accuracy is the median over framings."""
-    rows = list(rows)
+    rows = _dedupe(rows)
     n_all = len(rows)
     if n_all == 0:
         return {"n": 0}
@@ -115,7 +129,7 @@ def scorecard(rows: list[PredictionRow], floor_resamples: int = 200) -> dict[str
 def framing_scorecard(rows: list[PredictionRow]) -> dict[str, Any]:
     """Corruption and criteria-variant deltas relative to canonical framing."""
     acc = {}
-    for (f,), rs in group_rows([r for r in rows if r.permutation_id == "p0"], "framing_id").items():
+    for (f,), rs in group_rows([r for r in _dedupe(rows) if r.permutation_id == "p0"], "framing_id").items():
         c = [r.correct for r in rs if r.correct is not None]
         if c:
             acc[f] = float(np.mean(c))
