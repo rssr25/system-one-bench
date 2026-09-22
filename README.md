@@ -34,12 +34,17 @@ sys1bench score preds_mock.jsonl preds_prior.jsonl --out results/summary.json --
 ## Running real models
 
 ```bash
-export OPENROUTER_API_KEY=...
-sys1bench canary jev_openrouter --model typesafe/jev-1.13          # drift check first, every session
-scripts/run_suite_A.sh configs/models/jev_1.13.yaml results/jev     # Suite A end to end
+echo 'TypeSafe_API_KEY=...' > .env                                   # first-party TypeSafe key (gitignored)
+sys1bench canary jev_typesafe --model jev-1.13.0                    # drift check first, every session
+N=500 PERMS=3 CONC=4 scripts/run_suite_A.sh configs/models/jev_1.13.yaml results/jev
+sys1bench sweep-cardinality results/jev/card.json --config configs/models/jev_1.13.yaml \
+    --generator rag_relevance --question-key best_passage --ks 2,5,10,20,50,100,255 --n 150
+sys1bench interference results/jev/tickets.jsonl results/jev/interf.json --config configs/models/jev_1.13.yaml --target queue
+sys1bench report results/jev                                        # -> results/jev/REPORT.md
 
-pip install -e ".[local]" laya                                       # GPU box
+pip install laya                                                     # Laya (needs torch; GPU recommended)
 scripts/run_suite_A.sh configs/models/laya_en.yaml results/laya_en
+# or run from another venv without installing: SYS1BENCH="env PYTHONPATH=src /path/venv/bin/python -m sys1bench.cli" scripts/run_suite_A.sh ...
 ```
 
 A new hosted model with a conventional JSON API needs only a config file: copy `configs/models/example_future_vendor.yaml`. Anything else subclasses `BaseAdapter` and registers with `@register("id")` or the `sys1bench.adapters` entry-point group.
@@ -76,11 +81,16 @@ configs/            model configs (Jev, Laya, hybrid, future-vendor template), s
 | Framing expansion, corruption, permutation, short-circuit, decomposition, prior shift | done |
 | Runner with cache, canary, CLI, scorecards | done |
 | Adapters: mock, majority_prior, regex_keyword, hybrid_router | done, tested offline |
-| Adapters: jev_openrouter, laya_local, generic_http | implemented, parsing unit-tested; **not yet run against the live API or weights** |
+| Adapters: jev_typesafe (first-party API), laya_local (Router) | done, **verified live** against jev-1.13.0 and Laya 0.3.4 (english, typed-decisions) |
+| Adapters: jev_openrouter, generic_http | implemented, parsing unit-tested; not run live |
 | Adapters: embed_knn, nli_zeroshot, llm_constrained | implemented, need optional deps; untested |
-| Generators: log_triage, rag_relevance (K up to 255), policy_compliance, guardrail_intent, multilingual | todo |
-| Suite runners for C (scaling sweeps), E (interference), J (agentic) | todo |
+| Generator: rag_relevance (K up to 255, noul, ordinal grade) | done |
+| Generators: log_triage, policy_compliance, guardrail_intent, multilingual | todo |
+| Suite C sweeps (cardinality, length, Laya option budget), Suite E interference | done (`sweep-cardinality`, `sweep-length`, `sweep-budget`, `interference`) |
+| Results report (`sys1bench report`), control-arm analysis | done |
+| Suite J (agentic closed loop) | todo |
 | Tier P public manifests, Tier H collection | todo |
 | Plots (reliability, risk-coverage, scaling, interference matrix), LaTeX export | todo |
+| First live results (Jev 1.13.0 Suite A n=500; Laya english n=200 on CPU) | running 2026-09-22 |
 
 Known limitation: the two generators use fixed templates, so a regex baseline saturates on `queue`. Next generator iteration adds surface variation (paraphrased templates, typos, multilingual) while keeping rule-derived labels.
