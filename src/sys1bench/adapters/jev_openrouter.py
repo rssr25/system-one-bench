@@ -132,6 +132,9 @@ class JevOpenRouterAdapter(BaseAdapter):
                 delay = min(delay * 2, 16.0)
         raise RuntimeError(f"jev request failed after {self.max_retries} attempts: {last_exc}")
 
+    def parse_raw_answer(self, q: Question, payload: dict) -> Answer:
+        return parse_answer(q, payload)
+
     def decide(self, request: DecisionRequest) -> DecisionResponse:
         body = {"model": self.model_id, "state": request.state,
                 "questions": {k: _to_vendor_question(q) for k, q in request.questions.items()}}

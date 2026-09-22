@@ -213,6 +213,7 @@ class Answer(BaseModel):
     confidence: float | None = None
     abstained: bool = False
     truncated: bool = False
+    renormalised: bool = False          # raw vector summed to 1 ± tol (quantisation slack) and was rescaled
     raw_prob_sum: float | None = None
     quantisation_step: float | None = None
     error: str | None = None
@@ -260,6 +261,7 @@ class PredictionRow(BaseModel):
     confidence: float | None
     abstained: bool
     truncated: bool
+    renormalised: bool = False
     error: str | None
     quantisation_step: float | None
     controls: Controls

@@ -125,6 +125,9 @@ class LayaLocalAdapter(BaseAdapter):
             self.hardware = f"{gpu} ({dev})" if gpu else f"CPU {platform.machine()} ({dev})"
         return self._router
 
+    def parse_raw_answer(self, q: Question, payload: dict) -> Answer:
+        return parse_answer(q, payload, self.abstain_threshold)
+
     def decide(self, request: DecisionRequest) -> DecisionResponse:
         router = self._load()
         vq = {k: to_vendor_question(q) for k, q in request.questions.items()}

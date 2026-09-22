@@ -60,10 +60,15 @@ def detect_quantisation(probs: list[float]) -> float | None:
     return None
 
 
+SUM_EXACT_TOL = 1e-4   # sums within this are taken as-is
+SUM_SLACK_TOL = 0.02   # sums within this are rescaled and flagged `renormalised` (vendors quantise to 0.01)
+
+
 def finalize_answer(q: Question, probs: list[float], *, confidence: float | None = None,
-                    abstained: bool = False, truncated: bool = False, tol: float = 1e-4) -> Answer:
-    """Validate a probability vector against the contract. Out-of-tolerance vectors are recorded as failures,
-    never silently renormalised."""
+                    abstained: bool = False, truncated: bool = False, tol: float = SUM_SLACK_TOL) -> Answer:
+    """Validate a probability vector against the contract. Vectors whose sum is off by more than `tol` are recorded as
+    schema failures. Vectors off by less (quantisation slack, e.g. 0.99 from 0.01-rounded probabilities) are rescaled
+    and flagged `renormalised=True` with the raw sum kept, so the rate is reportable and nothing is hidden."""
     keys = q.option_keys
     if len(probs) != len(keys):
         return Answer.failed(q, f"probs length {len(probs)} != options {len(keys)}")
@@ -73,8 +78,12 @@ def finalize_answer(q: Question, probs: list[float], *, confidence: float | None
     if np.any(arr < -tol) or np.any(arr > 1 + tol):
         return Answer.failed(q, "probability outside [0,1]")
     s = float(arr.sum())
-    if abs(s - 1.0) > tol:
+    if abs(s - 1.0) > tol or s <= 0:
         return Answer.failed(q, f"probabilities sum to {s:.6f}")
+    step = detect_quantisation(list(arr))
+    renorm = abs(s - 1.0) > SUM_EXACT_TOL
+    if renorm:
+        arr = arr / s
     arr = np.clip(arr, 0.0, 1.0)
     return Answer(
         type=q.type,
@@ -84,8 +93,9 @@ def finalize_answer(q: Question, probs: list[float], *, confidence: float | None
         confidence=confidence,
         abstained=abstained,
         truncated=truncated,
+        renormalised=renorm,
         raw_prob_sum=s,
-        quantisation_step=detect_quantisation(list(arr)),
+        quantisation_step=step,
     )
 
 
@@ -105,6 +115,21 @@ class BaseAdapter(ABC):
 
     def decide_batch(self, requests: list[DecisionRequest]) -> list[DecisionResponse]:
         return [self.decide(r) for r in requests]
+
+    def reparse(self, request: DecisionRequest, cached: DecisionResponse) -> DecisionResponse | None:
+        """Rebuild answers from `cached.raw` with the current parser (no API call). Adapters that store the vendor
+        payload verbatim override `parse_raw_answer`; return None if nothing can be rebuilt."""
+        raw_answers = (cached.raw or {}).get("answers") if isinstance(cached.raw, dict) else None
+        if not isinstance(raw_answers, dict):
+            return None
+        answers = {}
+        for k, q in request.questions.items():
+            payload = raw_answers.get(k)
+            answers[k] = self.parse_raw_answer(q, payload) if isinstance(payload, dict) else Answer.failed(q, "missing answer")
+        return cached.model_copy(update={"answers": answers})
+
+    def parse_raw_answer(self, q: Question, payload: dict) -> Answer:  # pragma: no cover - overridden
+        raise NotImplementedError
 
     def warmup(self) -> None:  # pragma: no cover
         return None

@@ -43,6 +43,7 @@ def scorecard(rows: list[PredictionRow], floor_resamples: int = 200) -> dict[str
         "transport_failure_rate": float(np.mean([bool(r.error and r.error.startswith("transport")) for r in rows])),
         "schema_failure_rate": float(np.mean([bool(r.error and not r.error.startswith("transport")) for r in rows])),
         "truncation_rate": float(np.mean([r.truncated for r in rows])),
+        "renormalised_rate": float(np.mean([r.renormalised for r in rows])),
         "abstain_rate": float(np.mean([r.abstained for r in rows])),
         "capability_issue_rate": float(np.mean([bool(r.metadata.get("capability_issues")) for r in rows])),
     }
@@ -78,9 +79,14 @@ def scorecard(rows: list[PredictionRow], floor_resamples: int = 200) -> dict[str
             out["ordinal"] = ordinal.ordinal_summary(P, true_levels, levels)
         if len(y) >= 100:
             half = len(y) // 2
+            fit_acc = float((P[:half].argmax(1) == y[:half]).mean())
             t = calibration.fit_temperature(P[:half], y[:half])
             P2 = calibration.apply_temperature(P[half:], t)
-            out["temperature"] = {"T": t, "direction": "overconfident" if t > 1.05 else ("underconfident" if t < 0.95 else "calibrated"),
+            if fit_acc >= 0.999:
+                direction = "degenerate (all correct on fit half; any T<1 lowers NLL)"
+            else:
+                direction = "overconfident" if t > 1.05 else ("underconfident" if t < 0.95 else "calibrated")
+            out["temperature"] = {"T": t, "direction": direction, "fit_half_accuracy": fit_acc,
                                   "ece_after_refit": calibration.ece(P2.max(1), (P2.argmax(1) == y[half:]).astype(float)),
                                   "ece_before_same_half": calibration.ece(P[half:].max(1), (P[half:].argmax(1) == y[half:]).astype(float))}
     # permutation invariance

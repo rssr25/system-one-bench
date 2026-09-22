@@ -3,6 +3,8 @@ every number can be re-derived offline."""
 
 from __future__ import annotations
 
+import json
+import math
 import sqlite3
 import threading
 from pathlib import Path
@@ -23,7 +25,20 @@ class ResponseCache:
     def get(self, key: str) -> DecisionResponse | None:
         with self._lock:
             row = self._db.execute("SELECT payload FROM responses WHERE key=?", (key,)).fetchone()
-        return DecisionResponse.model_validate_json(row[0]) if row else None
+        if not row:
+            return None
+        try:
+            return DecisionResponse.model_validate_json(row[0])
+        except Exception:
+            # legacy entries stored failed answers with NaN probabilities (serialised as null); repair and let the
+            # runner rebuild them from `raw` via adapter.reparse
+            d = json.loads(row[0])
+            for a in d.get("answers", {}).values():
+                pr = a.get("probs") or []
+                if any(x is None or (isinstance(x, float) and math.isnan(x)) for x in pr):
+                    a["probs"] = []
+                    a["error"] = a.get("error") or "legacy_nan"
+            return DecisionResponse.model_validate(d)
 
     def put(self, key: str, adapter: str, model: str, resp: DecisionResponse) -> None:
         import time

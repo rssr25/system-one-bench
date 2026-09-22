@@ -69,7 +69,7 @@ def flatten(item: TaskItem, resp, adapter: BaseAdapter, suite: str | None, arm: 
             domain=item.domain, language=item.language, framing_id=q.framing_id, framing_group=q.framing_group,
             permutation_id=item.permutation_id, cardinality=q.cardinality, option_keys=a.option_keys, probs=a.probs,
             argmax=a.argmax, ground_truth=truth, correct=correct, confidence=a.confidence, abstained=a.abstained,
-            truncated=a.truncated, error=err, quantisation_step=a.quantisation_step, controls=item.controls,
+            truncated=a.truncated, renormalised=a.renormalised, error=err, quantisation_step=a.quantisation_step, controls=item.controls,
             latency_ms=resp.latency.client_ms, cost_usd=(resp.provider.cost_usd / n_q) if resp.provider.cost_usd is not None else None,
             adapter_id=adapter.adapter_id, model_id=resp.provider.model_id_returned or adapter.model_id,
             version_hash=resp.provider.version_hash, suite=suite, arm=arm,
@@ -87,6 +87,16 @@ def run_items(items: list[TaskItem], adapter: BaseAdapter, cache: ResponseCache 
         req = to_request(item, suite, arm)
         key = req.cache_key(adapter.adapter_id, adapter.model_id, adapter.tunables)
         resp = cache.get(key) if cache is not None else None
+        if resp is not None and any(not a.ok for a in resp.answers.values()) and resp.raw:
+            fixed = None
+            try:
+                fixed = adapter.reparse(req, resp)
+            except NotImplementedError:
+                fixed = None
+            if fixed is not None:
+                resp = fixed
+                if cache is not None:
+                    cache.put(key, adapter.adapter_id, adapter.model_id, resp)
         if resp is None:
             try:
                 resp = adapter.decide(req)

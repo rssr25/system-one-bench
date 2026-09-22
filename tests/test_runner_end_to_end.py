@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from sys1bench.adapters import get_adapter, list_adapters
 from sys1bench.adapters.base import finalize_answer
@@ -15,7 +16,7 @@ from sys1bench.framing.expand import load_framings
 from sys1bench.generators import get_generator
 from sys1bench.report import group_rows, markdown_table, scorecard
 from sys1bench.runners import ResponseCache, run_items
-from sys1bench.schemas import Level, Option, Question
+from sys1bench.schemas import Answer, Level, Option, Question
 
 
 def test_registry_has_core_adapters():
@@ -167,3 +168,42 @@ def test_sweeps_and_report(tmp_path):
     write_predictions(run_items(noisy, m, arm="main"), d / "preds_noisy.jsonl")
     md = build_report([d])
     assert "Local models" in md and "tickets.queue" in md and "Label-noise control" in md and "Short-circuit audit" in md
+
+
+def test_quantisation_slack_and_reparse(tmp_path):
+    import json
+
+    from sys1bench.adapters.jev_typesafe import JevTypeSafeAdapter
+    from sys1bench.runners.benchmark_runner import to_request
+    from sys1bench.schemas import DecisionResponse, LatencyRecord, ProviderRecord
+
+    q = Question(type="score", instructions="s", criteria=[Level(level=i) for i in range(5)])
+    a = finalize_answer(q, [0.04, 0.17, 0.67, 0.11, 0.0])  # sums to 0.99 (0.01 quantisation)
+    assert a.ok and a.renormalised and abs(sum(a.probs) - 1) < 1e-9 and a.raw_prob_sum == pytest.approx(0.99)
+    assert finalize_answer(q, [0.5, 0.5, 0.5, 0, 0]).error is not None  # 1.5 is a real failure
+    f = Answer.failed(q, "x")
+    assert f.probs == [] and json.loads(f.model_dump_json())["probs"] == []
+    # legacy cache entry with NaN probs is repaired on read and rebuilt from raw by reparse
+    item = get_generator("support_tickets", n=1, seed=1).generate()[0]
+    req = to_request(item)
+    raw = {"model": "jev-1.13.0", "answers": {
+        "queue": {"type": "choice", "choice": item.questions["queue"].ground_truth,
+                  "probabilities": {k: (0.99 if k == item.questions["queue"].ground_truth else 0.0) for k in item.questions["queue"].option_keys}, "confidence": 0.99},
+        "is_angry": {"type": "noul", "noul": 0.1},
+        "priority": {"type": "score", "score": 1.9, "probabilities": {"0": 0.04, "1": 0.17, "2": 0.67, "3": 0.11, "4": 0.0}, "confidence": 0.69}}}
+    legacy = DecisionResponse(answers={k: Answer.failed(qq, "probabilities sum to 0.99") for k, qq in item.questions.items()},
+                              latency=LatencyRecord(client_ms=1.0), provider=ProviderRecord(adapter_id="jev_typesafe", model_id_requested="jev-1.13.0"), raw=raw)
+    payload = json.loads(legacy.model_dump_json())
+    for ans in payload["answers"].values():
+        ans["probs"] = [None] * 5  # what the old code wrote
+    cache = ResponseCache(tmp_path / "c.sqlite")
+    ad = JevTypeSafeAdapter(api_key="dummy")
+    key = req.cache_key(ad.adapter_id, ad.model_id, ad.tunables)
+    cache._db.execute("INSERT INTO responses VALUES (?,?,?,?,?)", (key, "jev_typesafe", "jev-1.13.0", 0.0, json.dumps(payload)))
+    cache._db.commit()
+    rows = run_items([item], ad, cache)  # no network: cache hit + reparse
+    by = {r.question_key: r for r in rows}
+    assert by["queue"].error is None and by["queue"].correct is True and by["queue"].renormalised
+    assert by["priority"].error is None and by["priority"].argmax == "2" and by["priority"].renormalised
+    assert by["is_angry"].error is None and by["is_angry"].probs[0] == 0.1
+    assert cache.get(key).answers["priority"].ok  # repaired entry written back

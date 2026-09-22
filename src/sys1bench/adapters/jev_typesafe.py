@@ -131,6 +131,9 @@ class JevTypeSafeAdapter(BaseAdapter):
                 delay = min(delay * 2, 20.0)
         raise RuntimeError(f"typesafe request failed after {self.max_retries} attempts: {last}")
 
+    def parse_raw_answer(self, q: Question, payload: dict) -> Answer:
+        return parse_answer(q, payload)
+
     def decide(self, request: DecisionRequest) -> DecisionResponse:
         body = {"state": request.state, "model": self.model_id,
                 "questions": {k: to_vendor_question(q) for k, q in request.questions.items()}}
