@@ -45,7 +45,8 @@ def _load_dir(d: Path) -> dict[str, Any]:
 def _model_meta(rows: list[PredictionRow]) -> dict[str, Any]:
     r0 = next((r for r in rows if r.error is None), rows[0])
     hw = {r.metadata.get("hardware") for r in rows if r.metadata.get("hardware")}
-    deployment = "local" if r0.adapter_id in ("laya_local", "mock", "majority_prior", "regex_keyword", "embed_knn", "nli_zeroshot") else "hosted"
+    local_adapters = ("laya_local", "mock", "majority_prior", "regex_keyword", "embed_knn", "nli_zeroshot", "encoder_finetuned")
+    deployment = "local" if (r0.adapter_id in local_adapters or hw) else "hosted"
     return {"model_id": r0.model_id, "adapter": r0.adapter_id, "version_hash": r0.version_hash, "hardware": ", ".join(sorted(hw)) or "–",
             "deployment": deployment, "route": r0.metadata.get("route")}
 
