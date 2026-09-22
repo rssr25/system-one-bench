@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/sys1bench/"><img alt="PyPI" src="https://img.shields.io/pypi/v/sys1bench?color=4F46E5&label=PyPI"></a>
-  <a href="https://pypi.org/project/sys1bench/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/sys1bench?color=06B6D4"></a>
+  <a href="https://pypi.org/project/sys1bench/"><img alt="PyPI" src="https://img.shields.io/pypi/v/sys1bench?color=4F46E5&label=PyPI&logo=pypi&logoColor=white&cacheSeconds=3600"></a>
+  <a href="https://pypi.org/project/sys1bench/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/sys1bench?color=06B6D4&logo=python&logoColor=white&cacheSeconds=3600"></a>
   <a href="https://github.com/rssr25/system-one-bench/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/rssr25/system-one-bench/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
   <img alt="Tests" src="https://img.shields.io/badge/tests-31%20passing-brightgreen">
