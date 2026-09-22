@@ -89,20 +89,40 @@ def parse_answer(q: Question, payload: dict[str, Any]) -> Answer:
 @register("jev_typesafe")
 class JevTypeSafeAdapter(BaseAdapter):
     def __init__(self, model_id: str = "jev-1.13.0", url: str = DEFAULT_URL, api_key: str | None = None,
-                 timeout_s: float = 30.0, max_retries: int = 6, allow_alias: bool = False, **tunables) -> None:
+                 timeout_s: float = 30.0, max_retries: int = 6, allow_alias: bool = False, version_note: str | None = None,
+                 probe_models: bool = False, deployment: str = "hosted", hardware: str | None = None, **tunables) -> None:
+        """Also serves any TypeSafe-API-compatible server (e.g. Kev at http://127.0.0.1:8009/v1/systemone): set `url`,
+        `api_key: local`, `allow_alias: true`, `deployment: local`, and `probe_models: true` to record what the server
+        reports at /v1/models (backend, dtype, revision) as the version hash."""
         super().__init__(model_id, **tunables)
         if (model_id.endswith("latest") or model_id.endswith("preview")) and not allow_alias:
             raise ValueError("pin a versioned Jev id (e.g. jev-1.13.0); aliases move silently. Pass allow_alias=True to override.")
         self.url, self.timeout_s, self.max_retries = url, timeout_s, max_retries
+        self.deployment, self.hardware = deployment, hardware
         self.api_key = api_key or _load_dotenv_key()
         if not self.api_key:
             raise FatalAdapterError("No TypeSafe API key found. Set TypeSafe_API_KEY (or TYPESAFE_API_KEY) in the environment or in a .env file "
                                     "in the working directory. Keys: https://typesafe.ai")
         self._client = httpx.Client(timeout=timeout_s, http2=False)
+        self.version_note = version_note
+        if probe_models:
+            try:
+                base = url.split("/v1/")[0]
+                r = self._client.get(f"{base}/v1/models", headers={"Authorization": f"Bearer {self.api_key}"})
+                r.raise_for_status()
+                data = r.json()
+                models = data.get("models") or data.get("data") or []
+                mine = next((m for m in models if m.get("name") == model_id or m.get("id") == model_id), models[0] if models else {})
+                bits = [str(mine.get(k)) for k in ("name", "id", "revision", "run", "backend", "dtype", "release_date") if mine.get(k)]
+                bits += [f"{k}={v}" for k, v in data.items() if k not in ("models", "data") and isinstance(v, (str, int, float))]
+                self.version_note = " ".join(bits)[:200] or version_note
+                self.tunables["server_models"] = self.version_note
+            except Exception as e:  # probing is best effort
+                self.tunables["server_models_error"] = str(e)[:120]
 
     @property
     def capabilities(self) -> ModelCapabilities:
-        return ModelCapabilities(name=self.model_id, deployment="hosted", max_options=255, max_score_levels=10,
+        return ModelCapabilities(name=self.model_id, deployment=self.deployment, max_options=255, max_score_levels=10,  # type: ignore[arg-type]
                                  max_state_tokens=32_000, emits_confidence=True, supports_native_abstain=False,
                                  supports_batching=True, languages={"en"})
 
@@ -164,8 +184,9 @@ class JevTypeSafeAdapter(BaseAdapter):
             answers=answers,
             latency=LatencyRecord(client_ms=ms, route="typesafe", timestamp=time.time()),
             provider=ProviderRecord(adapter_id=self.adapter_id, model_id_requested=self.model_id, model_id_returned=data.get("model"),
-                                    version_hash=str(data.get("model") or self.model_id),
-                                    generation_id=headers.get("x-request-id") or headers.get("request-id"), route="typesafe",
+                                    version_hash=(str(data.get("model") or self.model_id) + (f" | {self.version_note}" if self.version_note else "")),
+                                    generation_id=headers.get("x-request-id") or headers.get("x-typesafe-request-id") or headers.get("request-id"),
+                                    route="typesafe" if self.url == DEFAULT_URL else self.url, hardware=self.hardware,
                                     billed_input_tokens=in_tok, billed_output_tokens=usage.get("output_tokens"),
                                     cost_usd=(in_tok / 1e6 * PRICE_PER_M_INPUT) if in_tok is not None else None),
             raw=data,

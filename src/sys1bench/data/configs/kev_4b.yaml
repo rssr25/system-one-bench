@@ -1,0 +1,12 @@
+# Kev (github.com/jaredpalmer/kev): a Jev-compatible decision model served locally.
+#   uv run --extra serve python -m kev.serve --run jaredpalmer/kev-4b --port 8009
+adapter: jev_typesafe
+model_id: kev-latest          # Kev's only served name; the revision is recorded from /v1/models
+url: http://127.0.0.1:8009/v1/systemone
+api_key: local
+allow_alias: true
+probe_models: true
+deployment: local
+version_note: jaredpalmer/kev-4b
+timeout_s: 120
+max_retries: 3
