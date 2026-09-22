@@ -63,3 +63,14 @@ def test_decomposition_combiners():
     w = fit_decomposition_weights(X, y)
     pred = apply_decomposition_weights(X, w) > 0.5
     assert (pred == y.astype(bool)).mean() == 1.0
+
+
+def test_rag_relevance_generator_cardinality():
+    for k in (2, 20, 255):
+        items = get_generator("rag_relevance", n=5, seed=1, cardinality=k).generate()
+        for it in items:
+            q = it.questions["best_passage"]
+            assert q.cardinality == k and q.ground_truth in it.state["passages"]
+            assert it.state["passages"][q.ground_truth].count(it.metadata["entity"]) >= 1
+            assert it.questions["relevance"].ground_truth in (0, 1, 2, 3)
+            assert it.questions["is_relevant"].ground_truth == (it.metadata["focus_grade"] == 3)

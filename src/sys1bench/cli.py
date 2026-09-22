@@ -129,12 +129,14 @@ if __name__ == "__main__":
 
 @app.command("sweep-cardinality")
 def sweep_cardinality(out: Path, adapter: Optional[str] = None, model: Optional[str] = None, config: Optional[Path] = None,
-                      ks: str = "2,4,6,8,10,12", n: int = 300, seed: int = 42, cache: Path = Path("cache.sqlite"), concurrency: int = 1):
-    """Suite C: accuracy / ECE-over-floor / latency vs number of options."""
+                      ks: str = "2,4,6,8,10,12", n: int = 300, seed: int = 42, cache: Path = Path("cache.sqlite"), concurrency: int = 1,
+                      generator: str = "support_tickets", question_key: str = "queue"):
+    """Suite C: accuracy / ECE-over-floor / latency vs number of options (use --generator rag_relevance --question-key best_passage for K up to 255)."""
     from .runners.sweeps import cardinality_sweep
 
     ad = _adapter_from(adapter, model, str(config) if config else None)
-    res = cardinality_sweep(ad, [int(k) for k in ks.split(",")], n=n, seed=seed, cache=ResponseCache(cache), concurrency=concurrency)
+    res = cardinality_sweep(ad, [int(k) for k in ks.split(",")], n=n, seed=seed, generator=generator, question_key=question_key,
+                            cache=ResponseCache(cache), concurrency=concurrency)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(res, indent=1, default=str))
     for k, v in res.items():
