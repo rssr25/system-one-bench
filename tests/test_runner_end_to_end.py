@@ -207,3 +207,16 @@ def test_quantisation_slack_and_reparse(tmp_path):
     assert by["priority"].error is None and by["priority"].argmax == "2" and by["priority"].renormalised
     assert by["is_angry"].error is None and by["is_angry"].probs[0] == 0.1
     assert cache.get(key).answers["priority"].ok  # repaired entry written back
+
+
+def test_robustness_suite_mock(tmp_path):
+    from sys1bench.framing.perturb import perturb_items
+    from sys1bench.runners.robustness import robustness_suite
+
+    items = get_generator("support_tickets", n=5, seed=1).generate()
+    p = perturb_items(items, "homoglyphs_10pct")
+    assert p[0].state != items[0].state and p[0].controls.perturbation == "homoglyphs_10pct"
+    res = robustness_suite(get_adapter("mock", skill=0.8), n=40, seed=1, perturbations=("upper", "typos_2pct"), densities=(0.0, 0.5))
+    assert set(res["perturbations"]) == {"upper", "typos_2pct"} and 0.5 in res["distractors"]
+    assert res["none_of_the_above"]["n_none"] > 0 and "auroc_confidence" in res["none_of_the_above"]["without_abstain_option"]
+    assert set(res["prior_shift"]) == {0.2, 0.5, 0.8}

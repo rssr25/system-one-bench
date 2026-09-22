@@ -54,8 +54,9 @@ class Answer(BaseModel):
 
 Adapter rules:
 - **Identical criteria text** goes to every model (Jev criteria, Laya criteria, LLM prompt, NLI hypotheses, kNN label embeddings). Descriptions live in one place in the manifest.
-- **Probabilities are validated** (finite, sum to 1 ± 1e-4 after renormalisation is *not* allowed; raw sums are recorded and out-of-tolerance vectors count as `schema_failure`).
+- **Probabilities are validated.** Finite, within [0, 1], and summing to 1. Vendors quantise (Jev returns 0.01-rounded probabilities and about 0.6% of its vectors sum to 0.99), so sums within ±0.02 are rescaled and flagged `renormalised=True` with the raw sum kept; the `renormalised_rate` is a scorecard metric. Sums off by more than 0.02 are `schema_failure`. Nothing is silently corrected.
 - **Nothing is silently fixed.** Truncation, renormalisation, and abstention are recorded as fields and become metrics.
+- **Raw payloads are kept.** Every response's vendor payload is stored verbatim in the cache; when a parser changes, `adapter.reparse` rebuilds answers from the raw payload without a new API call.
 - **Vendor limits are encoded as adapter capabilities** and checked at manifest-load time: Jev choice ≤ 255 options, score 2 to 10 levels, state ≤ 32k tokens, 64k per request; Laya context 512 (`laya`) or 1024 (`laya-multilingual`, `laya-typed-decisions`), option budget `head_max_len` 192/256 shared across options.
 
 ### 1.1 Adapters

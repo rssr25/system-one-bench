@@ -200,3 +200,20 @@ def report(results_dir: Path, out: Optional[Path] = None, title: str = "sys1benc
     out = out or (results_dir / "REPORT.md")
     out.write_text(md)
     typer.echo(f"wrote {out}")
+
+
+@app.command()
+def robustness(out: Path, adapter: Optional[str] = None, model: Optional[str] = None, config: Optional[Path] = None,
+               generator: str = "support_tickets", n: int = 300, seed: int = 42, cache: Path = Path("cache.sqlite"), concurrency: int = 1):
+    """Suite D: distractors, none-of-the-above (with / without abstain option), surface perturbations, prior shift."""
+    from .runners.robustness import robustness_suite
+
+    ad = _adapter_from(adapter, model, str(config) if config else None)
+    res = robustness_suite(ad, n=n, seed=seed, generator=generator, cache=ResponseCache(cache), concurrency=concurrency)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(res, indent=1, default=str))
+    typer.echo(json.dumps({k: v for k, v in res.items() if k in ("clean", "none_of_the_above", "prior_shift")}, indent=1, default=str)[:3000])
+    for kind, d in res.get("perturbations", {}).items():
+        typer.echo(f"perturb {kind:16s} " + "  ".join(f"{q}: dAcc={v['accuracy_delta']:+.3f} JSD={v['jsd_vs_clean']:.4f}" for q, v in d.items()))
+    for dens, d in res.get("distractors", {}).items():
+        typer.echo(f"distractor {dens:<5} " + "  ".join(f"{q}: dAcc={v['accuracy_delta']:+.3f} JSD={v['jsd_vs_clean']:.4f}" for q, v in d.items()))
