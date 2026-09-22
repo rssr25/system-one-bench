@@ -27,7 +27,7 @@ from typing import Any
 import httpx
 
 from ..schemas import Answer, DecisionRequest, DecisionResponse, LatencyRecord, ModelCapabilities, ProviderRecord, Question
-from .base import BaseAdapter, finalize_answer, register
+from .base import BaseAdapter, FatalAdapterError, finalize_answer, register
 
 DEFAULT_URL = "https://api.typesafe.ai/v1/systemone"
 PRICE_PER_M_INPUT = 0.042
@@ -38,7 +38,7 @@ def _load_dotenv_key() -> str | None:
     for k in ENV_KEYS:
         if os.environ.get(k):
             return os.environ[k]
-    for candidate in (Path.cwd() / ".env", Path(__file__).resolve().parents[3] / ".env"):
+    for candidate in (Path.cwd() / ".env",):
         if candidate.exists():
             for line in candidate.read_text().splitlines():
                 line = line.strip()
@@ -95,6 +95,9 @@ class JevTypeSafeAdapter(BaseAdapter):
             raise ValueError("pin a versioned Jev id (e.g. jev-1.13.0); aliases move silently. Pass allow_alias=True to override.")
         self.url, self.timeout_s, self.max_retries = url, timeout_s, max_retries
         self.api_key = api_key or _load_dotenv_key()
+        if not self.api_key:
+            raise FatalAdapterError("No TypeSafe API key found. Set TypeSafe_API_KEY (or TYPESAFE_API_KEY) in the environment or in a .env file "
+                                    "in the working directory. Keys: https://typesafe.ai")
         self._client = httpx.Client(timeout=timeout_s, http2=False)
 
     @property
@@ -121,6 +124,8 @@ class JevTypeSafeAdapter(BaseAdapter):
                         except ValueError:
                             pass
                     raise httpx.HTTPStatusError(f"{r.status_code}: {r.text[:200]}", request=r.request, response=r)
+                if r.status_code in (401, 403):
+                    raise FatalAdapterError(f"TypeSafe API rejected the key (HTTP {r.status_code}). Check TypeSafe_API_KEY.")
                 if 400 <= r.status_code < 500 and r.status_code != 429:
                     # request rejected (400 over the 32k state limit, 413, 422 malformed): never retry, classify as vendor rejection
                     raise ValueError(f"{r.status_code} rejected: {r.text[:300]}")
@@ -140,6 +145,8 @@ class JevTypeSafeAdapter(BaseAdapter):
                 "questions": {k: to_vendor_question(q) for k, q in request.questions.items()}}
         try:
             data, ms, headers = self._post(body)
+        except FatalAdapterError:
+            raise
         except Exception as e:
             kind = "rejected_by_vendor" if isinstance(e, ValueError) else "transport"
             return DecisionResponse(

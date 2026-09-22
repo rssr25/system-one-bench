@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 (2026-09-22)
+
+- CLI fails fast with a clear message when no TypeSafe key is found, when the key is rejected (401/403), when a
+  moving alias is used, or when an adapter is unknown; `run` warns when rows carry errors.
+- Packaged example model configs (`sys1bench configs`, `--config jev_1.13`); `.env` is read from the working
+  directory only.
+
 ## Unreleased
 
 - `sys1bench suite` orchestrates suites A, C, D, E, F, G, I portably with retries; `report --latex` and `report --html`

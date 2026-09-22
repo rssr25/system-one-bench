@@ -1,0 +1,6 @@
+adapter: laya_local
+model_id: convaiinnovations/laya
+checkpoint: english             # english | multilingual | typed-decisions | router
+device: cuda                    # falls back to CPU if CUDA is unavailable; the device used is recorded per row
+head_max_len: 192               # Suite C sweeps [64,128,192,256,384,512]
+max_len: 512

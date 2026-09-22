@@ -1,6 +1,6 @@
 [project]
 name = "sys1bench"
-version = "0.3.0"
+version = "0.3.1"
 description = "Benchmark harness for typed System One decision models (choice / score / noul): calibration vs noise floor, framing sensitivity, selective prediction, ordinal fidelity, interference, robustness."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -59,7 +59,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"sys1bench.data" = ["framings/*.yaml", "canary/*.jsonl"]
+"sys1bench.data" = ["framings/*.yaml", "canary/*.jsonl", "configs/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

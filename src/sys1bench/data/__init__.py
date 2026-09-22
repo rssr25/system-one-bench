@@ -22,10 +22,10 @@ def framings_path(name_or_path: str | Path) -> Path:
     p = Path(name_or_path)
     if p.exists():
         return p
-    stem = p.stem if p.suffix else str(name_or_path)
-    cand = _pkg_file("framings", f"{stem}.yaml")
-    if cand.exists():
-        return cand
+    for stem in (str(name_or_path), p.stem):  # names may contain dots (jev_1.13), so try the full name first
+        cand = _pkg_file("framings", f"{stem}.yaml")
+        if cand.exists():
+            return cand
     raise FileNotFoundError(f"no framing set {name_or_path!r}; packaged: {sorted(list_framings())}")
 
 
@@ -35,3 +35,20 @@ def list_framings() -> list[str]:
 
 def canary_path() -> Path:
     return _pkg_file("canary", "canary.jsonl")
+
+
+def config_path(name_or_path: str | Path) -> Path:
+    """Resolve a model config: an existing path, or a packaged example in `configs/<name>.yaml`
+    (jev_1.13, jev_1.13_openrouter, laya_en, laya_typed_decisions, example_future_vendor, hybrid_mock)."""
+    p = Path(name_or_path)
+    if p.exists():
+        return p
+    for stem in (str(name_or_path), p.stem):
+        cand = _pkg_file("configs", f"{stem}.yaml")
+        if cand.exists():
+            return cand
+    raise FileNotFoundError(f"no config {name_or_path!r}; packaged: {sorted(list_configs())}")
+
+
+def list_configs() -> list[str]:
+    return [p.stem for p in Path(str(resources.files(_PKG).joinpath("configs"))).glob("*.yaml")]

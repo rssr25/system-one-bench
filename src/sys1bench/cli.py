@@ -17,7 +17,7 @@ import yaml
 
 from . import __version__
 from .adapters import get_adapter, list_adapters
-from .data import framings_path
+from .data import canary_path, config_path, framings_path, list_configs
 from .framing import apply_corruption, expand_framings, permute_options, strip_options, strip_state
 from .framing.expand import load_framings
 from .generators import GENERATORS, get_generator
@@ -38,14 +38,31 @@ def _main(ctx: typer.Context, version: bool = typer.Option(False, "--version", "
         typer.echo(ctx.get_help())
 
 
+def _fail(msg: str, code: int = 2) -> None:
+    typer.secho(f"error: {msg}", fg=typer.colors.RED, err=True)
+    raise typer.Exit(code)
+
+
 def _adapter_from(adapter: str | None, model: str | None, config: str | None):
+    from .adapters.base import FatalAdapterError
+
     cfg = {}
     if config:
-        cfg = yaml.safe_load(Path(config).read_text()) or {}
-    adapter = adapter or cfg.pop("adapter")
+        try:
+            cfg = yaml.safe_load(config_path(config).read_text()) or {}
+        except FileNotFoundError as e:
+            _fail(str(e))
+    adapter = adapter or cfg.pop("adapter", None)
+    if not adapter:
+        _fail("no adapter given: pass --adapter <id> or --config <yaml with an `adapter:` key>. Known: " + ", ".join(list_adapters()))
     if model:
         cfg["model_id"] = model
-    return get_adapter(adapter, **cfg)
+    try:
+        return get_adapter(adapter, **cfg)
+    except KeyError as e:
+        _fail(str(e).strip('"'))
+    except (ValueError, FatalAdapterError) as e:
+        _fail(str(e))
 
 
 @app.command()
@@ -56,7 +73,18 @@ def adapters():
 
 
 @app.command()
+def configs(show: Optional[str] = typer.Argument(None, help="print a packaged config by name")):
+    """List packaged example model configs (use with --config <name>), or print one to copy and edit."""
+    if show:
+        typer.echo(config_path(show).read_text())
+        return
+    for c in sorted(list_configs()):
+        typer.echo(c)
+
+
+@app.command()
 def generators():
+    """List Tier G generators and their versions."""
     for g in sorted(GENERATORS):
         typer.echo(f"{g}@{GENERATORS[g].version}")
 
@@ -93,14 +121,22 @@ def run(manifest: Path, out: Path, adapter: str | None = None, model: str | None
     if permutations:
         items = permute_options(items, permutations)
     c = ResponseCache(cache)
-    rows_all += run_items(items, ad, c, suite=suite, arm="main", concurrency=concurrency, progress=True)
-    base = [i for i in items if i.permutation_id == "p0" and all(q.framing_id == "f0" for q in i.questions.values())]
-    if corruption:
-        rows_all += run_items(apply_corruption(base), ad, c, suite=suite, arm="corruption", concurrency=concurrency)
-    if short_circuit:
-        rows_all += run_items(strip_state(base), ad, c, suite=suite, arm="state_only", concurrency=concurrency)
-        rows_all += run_items(strip_options(base), ad, c, suite=suite, arm="options_only", concurrency=concurrency)
+    from .adapters.base import FatalAdapterError
+
+    try:
+        rows_all += run_items(items, ad, c, suite=suite, arm="main", concurrency=concurrency, progress=True)
+        base = [i for i in items if i.permutation_id == "p0" and all(q.framing_id == "f0" for q in i.questions.values())]
+        if corruption:
+            rows_all += run_items(apply_corruption(base), ad, c, suite=suite, arm="corruption", concurrency=concurrency)
+        if short_circuit:
+            rows_all += run_items(strip_state(base), ad, c, suite=suite, arm="state_only", concurrency=concurrency)
+            rows_all += run_items(strip_options(base), ad, c, suite=suite, arm="options_only", concurrency=concurrency)
+    except FatalAdapterError as e:
+        _fail(str(e), code=3)
     write_predictions(rows_all, out)
+    n_err = sum(1 for r in rows_all if r.error)
+    if n_err:
+        typer.secho(f"warning: {n_err}/{len(rows_all)} rows have errors (see the `error` field); first: {next(r.error for r in rows_all if r.error)}", fg=typer.colors.YELLOW, err=True)
     typer.echo(f"wrote {len(rows_all)} prediction rows to {out}; cache size {len(c)}")
 
 
@@ -124,11 +160,11 @@ def score(predictions: list[Path], out: Path = Path("results/summary.json"), tab
 
 
 @app.command()
-def canary(adapter: str, model: str | None = None, manifest: Path = Path("data/canary/canary.jsonl"),
+def canary(adapter: str, model: str | None = None, manifest: Path | None = None,
            store: Path = Path("results/canary"), config: Path | None = None):
-    """Run the drift canary for a hosted model."""
+    """Run the drift canary for a hosted model (default: the packaged 200-item set)."""
     ad = _adapter_from(adapter, model, str(config) if config else None)
-    res = run_canary(load_manifest(manifest), ad, store)
+    res = run_canary(load_manifest(manifest or canary_path()), ad, store)
     typer.echo(json.dumps(res, indent=1))
     if res["drift_suspected"]:
         raise typer.Exit(code=2)

@@ -1,0 +1,4 @@
+adapter: hybrid_router
+threshold: 0.7
+primary: {adapter: mock, skill: 0.8, temperature: 0.8, latency_ms: 40}
+fallback: {adapter: mock, skill: 0.95, latency_ms: 1500}

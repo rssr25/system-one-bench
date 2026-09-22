@@ -62,10 +62,10 @@ sys1bench score preds.jsonl prior.jsonl --out summary.json
 # Jev (hosted, first-party API)
 echo 'TypeSafe_API_KEY=...' > .env
 sys1bench canary jev_typesafe --model jev-1.13.0                        # 200 fixed items; drift baseline
-sys1bench suite all results/jev --config configs/models/jev_1.13.yaml --n 500 --concurrency 4
+sys1bench suite all results/jev --config jev_1.13 --n 500 --concurrency 4      # packaged config; `sys1bench configs` lists them
 
 # Laya (local; same manifests as Jev so the comparison is item-for-item)
-sys1bench suite all results/laya --config configs/models/laya_en.yaml --manifests-from results/jev --budget
+sys1bench suite all results/laya --config laya_en --manifests-from results/jev --budget
 
 # Report, LaTeX tables, HTML dashboard and plots for everything under results/
 sys1bench report results --latex results/tables.tex --html results/dashboard.html
@@ -80,7 +80,7 @@ sys1bench plots results
 
 | Your model | What to do |
 |---|---|
-| Hosted, conventional JSON decisions API | Copy [`configs/models/example_future_vendor.yaml`](configs/models/example_future_vendor.yaml), fill in URL, auth env var and field names. No code. |
+| Hosted, conventional JSON decisions API | `sys1bench configs example_future_vendor > my_model.yaml`, fill in URL, auth env var and field names, run with `--config my_model.yaml`. No code. |
 | Anything else | Subclass `BaseAdapter`: declare `capabilities` (primitives, max options, state tokens, native abstain, batching) and implement `decide` (state + typed questions in, one probability vector per question out). Register with `@register("my_model")` or the `sys1bench.adapters` entry-point group from your own package. |
 
 Capability limits are declared, then measured: a request outside them is recorded as a `capability_issue` or `rejected_by_vendor` row, never a crash.

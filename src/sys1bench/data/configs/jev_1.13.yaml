@@ -1,0 +1,4 @@
+adapter: jev_typesafe
+model_id: jev-1.13.0            # versioned id; never jev-latest / jev-preview
+timeout_s: 30
+max_retries: 6
