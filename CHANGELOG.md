@@ -30,4 +30,3 @@ First installable release.
 - Tier G generators with policy-dependent labels and paired control arms: `support_tickets`, `phishing_email` (with 5-way decomposition), `rag_relevance` (2 to 255 options).
 - Suites A (calibration, selective prediction), B (framing: paraphrases, criteria variants, corruption, decomposition), C (cardinality, length, option budget), D (distractors, none-of-the-above, perturbations, prior shift), E (multi-question interference); audits (short-circuit, leakage, positional bias, label noise, unknowable arm).
 - Cached runner with reparse-from-raw, drift canary (packaged 200-item set), item-level statistics, markdown report with hosted and local models separated, plots.
-- First live results for Jev 1.13.0 and Laya 0.3.4 (english, typed-decisions) on identical manifests.
