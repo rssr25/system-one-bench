@@ -1,0 +1,5 @@
+adapter: jev_openrouter
+model_id: typesafe/jev-1.13     # never jev-latest
+route: openrouter
+timeout_s: 30
+max_retries: 5

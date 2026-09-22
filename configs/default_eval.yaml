@@ -1,0 +1,8 @@
+cache: cache.sqlite
+concurrency_hosted: 8
+concurrency_local: 1
+floor_resamples: 200
+bootstrap_resamples: 10000
+paraphrases_per_question: 5
+permutations: 5
+min_n_for_headline: 500

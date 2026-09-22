@@ -1,0 +1,4 @@
+suite: C
+cardinality: [2, 5, 10, 12]            # support_tickets supports up to 12 queues; use rag_relevance (todo) for 50..255
+target_tokens: [128, 256, 512, 1024, 2048, 4096, 8192]
+laya_head_max_len: [64, 128, 192, 256, 384, 512]

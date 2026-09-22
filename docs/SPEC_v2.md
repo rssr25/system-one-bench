@@ -336,3 +336,27 @@ Recorded here so decisions are traceable. See discussion thread for current thin
 5. How to treat Laya `head_max_len` in headline tables: vendor default, best-of-sweep, or both?
 6. Public leaderboard or static report? A leaderboard needs Tier H rotation and a submission protocol.
 7. Governance for hosted drift: rerun everything on every canary alarm, or freeze results per version hash and let tables accumulate?
+
+---
+
+## 11. Additions after brainstorm (2026-09-22)
+
+All accepted. Implementation status is tracked in `README.md`.
+
+- **Downstream decision value (Suite I).** Each Tier G generator ships a cost matrix per question (`cost_matrix` in the manifest). Report mean realised cost and regret vs oracle under three policies: act on argmax, act on the Bayes-optimal option given the probabilities, and act-or-escalate at a threshold. `value_of_calibration` = cost(argmax) minus cost(Bayes): zero for a model whose probabilities carry no information about asymmetric risk. Metric kernel: `metrics/decision_value.py`.
+- **Prior-shift stress test (Suite D4).** Resample a manifest so one label holds 20%, 50%, 80% of the ground truth and re-score calibration. A model whose probabilities do not move with the base rate is reproducing a training prior. Utility: `framing.resample_prior_shift`.
+- **Hybrid router baseline.** `hybrid_router` adapter: a System One model answers; questions below a confidence threshold escalate to a second adapter. Sweep the threshold and plot accuracy, latency and cost against escalation rate. This is the production comparison the vendors' marketing avoids.
+- **Adversarial framing.** Suite B gains a worst-case row: accept externally contributed paraphrases that preserve meaning but lower accuracy, report `accuracy_min` over the adversarial set separately from the friendly paraphrase range.
+- **Agentic closed-loop task (Suite J, phase 3).** A 20-step tool-selection episode where each step is a `choice` over tools plus a `noul` "is the task complete". Score episode success, compounding error, and calibration of the completion probability. Compares System One models as the decision layer inside an agent, which is how they are marketed.
+- **Public drift tracker.** The 200-item canary (`data/canary/canary.jsonl`) is run daily against each hosted model and its drift curve published. Cheap, and the reference other people cite when a version changes silently.
+
+## 12. Future models
+
+The harness must outlive Jev 1.13 and Laya 1.0. Rules:
+
+1. **Nothing vendor-specific outside `adapters/`.** Suites, metrics and reports see only `DecisionRequest`, `DecisionResponse` and `ModelCapabilities`.
+2. **Capabilities are declared, then measured.** An adapter declares limits (options, levels, state tokens, primitives, native abstain, batching, languages). The runner records violations per row as `capability_issues`; the report turns them into rates. A model with a smaller envelope is not penalised by a crash, it is scored on what it accepted and its coverage is reported.
+3. **New hosted model = a YAML file.** `generic_http` maps a conventional JSON decisions API via config (`configs/models/example_future_vendor.yaml`). Only unusual shapes need code, and those register with `@register("id")` or the `sys1bench.adapters` entry-point group from a separate package.
+4. **New primitive = a schema change, not a rewrite.** Primitives are a literal in `schemas.py`; metrics dispatch on it. A future `rank` or `extract` primitive adds a branch in the contract and a metric module, with the existing suites unchanged.
+5. **Version is data.** Every prediction row carries the model id string the provider returned and a version hash. Results across versions are never merged; the canary decides when a new version starts.
+6. **Manifests are frozen by hash, generators by version.** A future model is scored on the same bytes as today's, and generator upgrades produce a new manifest hash rather than silently changing old numbers.

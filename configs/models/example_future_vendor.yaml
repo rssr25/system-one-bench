@@ -1,0 +1,18 @@
+# Template for a new hosted System One model: no code needed if its JSON shape is conventional.
+adapter: generic_http
+model_id: vendor/decider-1.0
+url: https://api.vendor.example/v1/decisions
+auth_env: VENDOR_API_KEY
+type_map: {choice: choice, score: score, noul: boolean}
+body_template: {"model": "{model_id}", "state": "{state}", "questions": "{questions}"}
+answers_path: [answers]
+fields:
+  probs: [[probabilities], [distribution]]
+  p_true: [[probability]]
+  confidence: [[confidence]]
+  model_returned: [[model]]
+  generation_id: [[id]]
+  input_tokens: [[usage, input_tokens]]
+price_per_m_input: 0.05
+max_options: 255
+max_state_tokens: 32000

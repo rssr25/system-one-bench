@@ -1,0 +1,20 @@
+name: ci
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: pytest -q
+      - name: offline smoke run (mock model)
+        run: |
+          sys1bench generate support_tickets /tmp/t.jsonl --n 50 --seed 1
+          sys1bench run /tmp/t.jsonl /tmp/p.jsonl --adapter mock --framings data/framings/support_tickets.yaml --permutations 2 --cache /tmp/c.sqlite
+          sys1bench score /tmp/p.jsonl --out /tmp/summary.json

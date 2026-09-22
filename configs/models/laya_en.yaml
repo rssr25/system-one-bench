@@ -1,0 +1,7 @@
+adapter: laya_local
+model_id: convaiinnovations/laya
+checkpoint: laya                # laya | laya-multilingual | laya-typed-decisions | router
+device: cuda
+head_max_len: 192               # sweep in Suite C: [64,128,192,256,384,512]
+max_len: 512
+hardware: "NVIDIA T4"

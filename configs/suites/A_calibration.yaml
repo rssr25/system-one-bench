@@ -1,0 +1,9 @@
+suite: A
+generators:
+  - {name: support_tickets, n: 2000, seed: 42}
+  - {name: support_tickets, n: 500, seed: 43, unknowable_frac: 1.0}   # calibration ceiling arm
+  - {name: support_tickets, n: 500, seed: 44, label_noise: 0.05}       # noise control arm
+  - {name: phishing_email, n: 2000, seed: 42}
+framings: [data/framings/support_tickets.yaml, data/framings/phishing_email.yaml]
+permutations: 0
+abstain_arm: true

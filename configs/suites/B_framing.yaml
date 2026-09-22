@@ -1,0 +1,11 @@
+suite: B
+generators:
+  - {name: support_tickets, n: 1000, seed: 42}
+  - {name: phishing_email, n: 2000, seed: 42}
+framings: [data/framings/support_tickets.yaml, data/framings/phishing_email.yaml]
+corruption: true
+decomposition:
+  question: is_phishing
+  sub_prefix: sub_
+  fixed_rule: any
+  fit_weights_on_half: true

@@ -1,0 +1,118 @@
+import numpy as np
+
+from sys1bench.adapters import get_adapter, list_adapters
+from sys1bench.adapters.base import finalize_answer
+from sys1bench.adapters.jev_openrouter import parse_answer as jev_parse
+from sys1bench.analysis import (
+    label_order_report,
+    leakage_report,
+    mcnemar,
+    paired_bootstrap,
+    short_circuit_report,
+)
+from sys1bench.framing import expand_framings, permute_options, strip_options, strip_state
+from sys1bench.framing.expand import load_framings
+from sys1bench.generators import get_generator
+from sys1bench.report import group_rows, markdown_table, scorecard
+from sys1bench.runners import ResponseCache, run_items
+from sys1bench.schemas import Level, Option, Question
+
+
+def test_registry_has_core_adapters():
+    names = list_adapters()
+    for n in ("mock", "jev_openrouter", "laya_local", "generic_http", "hybrid_router", "majority_prior", "regex_keyword"):
+        assert n in names
+
+
+def test_contract_rejects_bad_vectors():
+    q = Question(type="choice", instructions="x", criteria=[Option(key="a"), Option(key="b")])
+    assert finalize_answer(q, [0.7, 0.2]).error is not None
+    assert finalize_answer(q, [0.7, float("nan")]).error is not None
+    assert finalize_answer(q, [0.7, 0.3]).ok and finalize_answer(q, [0.7, 0.3]).quantisation_step == 0.1
+
+
+def test_jev_parse_shapes():
+    q = Question(type="choice", instructions="x", criteria=[Option(key="a"), Option(key="b")])
+    a = jev_parse(q, {"choice": "a", "probabilities": {"a": 0.73, "b": 0.27}, "confidence": 0.73})
+    assert a.argmax == "a" and a.quantisation_step == 0.01
+    a2 = jev_parse(q, {"probabilities": [{"key": "a", "probability": 0.2}, {"key": "b", "probability": 0.8}]})
+    assert a2.argmax == "b"
+    n = Question(type="noul", instructions="y?")
+    assert jev_parse(n, {"probability": 0.9}).probs[0] == 0.9
+    s = Question(type="score", instructions="s", criteria=[Level(level=0), Level(level=1), Level(level=2)])
+    assert jev_parse(s, {"distribution": {"0": 0.1, "1": 0.2, "2": 0.7}}).argmax == "2"
+
+
+def test_end_to_end_mock(tmp_path):
+    items = get_generator("support_tickets", n=120, seed=1).generate()
+    fr = load_framings("data/framings/support_tickets.yaml")
+    rows_items = permute_options(expand_framings(items, fr), 2)
+    cache = ResponseCache(tmp_path / "c.sqlite")
+    good = get_adapter("mock", skill=0.7, temperature=0.5, quantise=0.01)  # clearly over-confident
+    rows = run_items(rows_items, good, cache, suite="A", concurrency=4)
+    assert 0.99 * len(rows_items) <= len(cache) <= len(rows_items)  # identical requests (e.g. a shuffle equal to canonical) dedupe
+    rows_again = run_items(rows_items, good, cache)
+    assert [r.probs for r in rows] == [r.probs for r in rows_again]  # cache hit reproduces
+    cards = {}
+    for (qk,), rs in group_rows(rows, "question_key").items():
+        cards[qk] = scorecard(rs, floor_resamples=20)
+    c = cards["queue"]
+    assert 0.6 < c["accuracy"] < 1.0
+    assert c["framing"]["n_framings"] >= 6
+    assert c["calibration"]["ece_over_floor"] > 0
+    assert c["calibration"]["quant_step"] == 0.01
+    assert c["temperature"]["direction"] == "overconfident"
+    assert "permutation" in c and c["permutation"]["n_items"] == 120
+    assert "ordinal" in cards["priority"] and "rps" in cards["priority"]["ordinal"]
+    md = markdown_table(cards)
+    assert "queue" in md and "ECE/floor" in md
+
+
+def test_baselines_and_audits():
+    items = get_generator("support_tickets", n=200, seed=2).generate()
+    prior = get_adapter("majority_prior")
+    prior.fit(items)
+    rows_prior = run_items(items, prior)
+    prior_acc = float(np.mean([r.correct for r in rows_prior if r.question_key == "queue"]))
+    rules = get_generator("support_tickets").regex_rules()
+    rx = get_adapter("regex_keyword", rules=rules)
+    rows_rx = run_items(items, rx)
+    rx_acc = float(np.mean([r.correct for r in rows_rx if r.question_key == "queue"]))
+    assert rx_acc > prior_acc  # regex ceiling should beat priors on generated data
+    m = get_adapter("mock", skill=0.85)
+    full = [r for r in run_items(items, m) if r.question_key == "queue"]
+    so = [r for r in run_items(strip_state(items), m) if r.question_key == "queue"]
+    oo = [r for r in run_items(strip_options(items), m) if r.question_key == "queue"]
+    rep = short_circuit_report(full, so, oo, prior_acc)
+    assert set(rep) >= {"flag_state_only", "flag_options_only"}
+    leak = leakage_report(items)
+    assert 0 <= leak["leak_rate"] <= 1
+    perm_rows = run_items(permute_options(items, 3), get_adapter("mock", position_bias=3.0))
+    lo = label_order_report(perm_rows)
+    assert any(v["index0_share"] > 0.4 for v in lo.values())
+    pb = paired_bootstrap(np.array([r.correct for r in full], float), np.array([r.correct for r in rows_prior if r.question_key == "queue"], float), n_boot=500)
+    assert pb["ci_low"] <= pb["diff"] <= pb["ci_high"]
+    mc = mcnemar([r.correct for r in full], [r.correct for r in rows_prior if r.question_key == "queue"])
+    assert 0 <= mc["p"] <= 1
+
+
+def test_hybrid_router_escalates():
+    h = get_adapter("hybrid_router", threshold=0.99, primary={"adapter": "mock", "skill": 0.5, "temperature": 3.0},
+                    fallback={"adapter": "mock", "skill": 1.0, "latency_ms": 1000})
+    items = get_generator("phishing_email", n=20, seed=1).generate()
+    rows = run_items(items, h)
+    assert all(r.latency_ms > 1000 for r in rows)
+
+
+def test_decomposition_and_prior_shift():
+    from sys1bench.analysis import decomposition_report
+    from sys1bench.framing import resample_prior_shift
+
+    items = get_generator("phishing_email", n=200, seed=5).generate()
+    rows = run_items(items, get_adapter("mock", skill=0.9))
+    rep = decomposition_report(rows, "is_phishing")
+    assert rep["n"] == 200 and len(rep["sub_questions"]) == 5
+    assert "decomposition_gain_fixed" in rep and "decomposition_gain_fitted" in rep
+    shifted = resample_prior_shift(items, "is_phishing", "true", 0.8, n=100)
+    share = np.mean([it.questions["is_phishing"].ground_truth for it in shifted])
+    assert 0.75 <= share <= 0.85 and shifted[0].controls.prior_shift.startswith("is_phishing")

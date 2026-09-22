@@ -1,0 +1,5 @@
+suite: D
+permutations: 5
+distractor_density: [0.0, 0.25, 0.5]
+none_correct_frac: 0.2
+abstain_arm: true

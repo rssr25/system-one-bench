@@ -1,0 +1,31 @@
+tickets.queue:
+  paraphrases:
+    - "Route this ticket to the team that should handle it."
+    - "Select the single most appropriate queue for this customer message."
+    - "Which department owns this issue?"
+    - "Pick the queue. Choose the one whose description best matches the customer's primary request."
+    - "Categorise the ticket by the team responsible for resolving it."
+  criteria_variants:
+    label_only: true
+    vague: true
+    with_negatives:
+      billing: "Do not use for unrecognised or fraudulent charges (use fraud) or for refunds after a return (use returns)."
+      shipping: "Do not use for returns."
+      account: "Do not use for privacy or data-deletion requests."
+      technical: "Do not use for accessibility issues."
+      cancellation: "Do not use for questions about pricing or upgrades."
+      sales: "Do not use for cancellations."
+tickets.is_angry:
+  paraphrases:
+    - "Does the customer sound angry, hostile, or threatening to leave?"
+    - "Is the tone of this message angry?"
+    - "Would a support agent flag this customer as upset or hostile?"
+    - "Is the customer expressing frustration that goes beyond a neutral complaint?"
+    - "Anger present: yes or no?"
+tickets.priority:
+  paraphrases:
+    - "Priority 0-4. Rules: informational 0, routine 1, blocked or money at stake 2; +1 if angry; +1 if tier is gold or enterprise; maximum 4."
+    - "Score the ticket's priority. Base level comes from the issue (0 informational, 1 routine, 2 blocked/money). Increase by one for an angry customer and by one for a gold or enterprise tier. Never exceed 4."
+    - "Using the policy (issue urgency 0-2, plus one for anger, plus one for gold/enterprise, cap 4), what priority level applies?"
+    - "How urgent is this, 0 to 4? Apply: urgency of issue, then +1 anger, +1 premium tier (gold/enterprise), cap at 4."
+    - "Assign priority per policy: start at issue urgency (0, 1 or 2), add 1 when the customer is angry, add 1 when the tier is gold or enterprise, cap at 4."

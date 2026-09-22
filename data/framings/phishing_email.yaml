@@ -1,0 +1,19 @@
+phish.is_phishing:
+  paraphrases:
+    - "Is this message an attempt to deceive the recipient into revealing credentials, paying money, or opening malware?"
+    - "Phishing or social engineering: yes or no?"
+    - "Should this email be quarantined as a likely attack?"
+    - "Judge whether this email is malicious."
+    - "Is the sender trying to trick the recipient?"
+phish.attack_class:
+  paraphrases:
+    - "Which category best describes this email?"
+    - "Label the message with its attack type, or benign if it is legitimate."
+    - "Identify the kind of email this is."
+  criteria_variants:
+    label_only: true
+    vague: true
+phish.urgency:
+  paraphrases:
+    - "How much time pressure does the message apply? 0 none, 1 mild, 2 within days, 3 within 24 hours or threats."
+    - "Score urgency from 0 (no deadline) to 3 (immediate deadline or threatened consequences)."
