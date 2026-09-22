@@ -299,6 +299,11 @@ def test_dashboard_and_latex_build(tmp_path):
     rows = run_items(expand_framings(items, load_framings(framings_path("support_tickets"))), get_adapter("mock", skill=0.8), arm="main")
     write_predictions(rows, d / "preds_tickets.jsonl")
     html = build_dashboard([d])
-    assert "createElement('canvas')" in html and "mock-v1" in html and "NaN" not in html
+    assert "createElement('canvas')" in html and "mock-v1" in html
+    import json as _json
+
+    payload = html.split('<script id="data" type="application/json">')[1].split("</script>")[0]
+    data = _json.loads(payload)  # valid JSON, NaN-free
+    assert data["models"][0]["questions"]["tickets.queue"]["reliability"]
     tex = latex_table({"tickets.queue": {"primitive": "choice", "accuracy": 0.8, "accuracy_range": [0.7, 0.9]}}, "cap", "tab:x")
     assert r"\begin{table}" in tex and "0.800" in tex
