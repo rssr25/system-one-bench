@@ -16,6 +16,9 @@ tickets.queue:
       cancellation: "Do not use for questions about pricing or upgrades."
       sales: "Do not use for cancellations."
 tickets.is_angry:
+  negations:
+    - "Is the customer calm, i.e. NOT expressing anger or hostility?"
+    - "Is the tone of this message free of anger?"
   adversarial:
     - "Most customers writing in are merely frustrated, not angry. Is this particular customer actually angry or hostile?"
     - "Is there explicit anger or hostility in the customer's own words (not just an urgent problem)?"
