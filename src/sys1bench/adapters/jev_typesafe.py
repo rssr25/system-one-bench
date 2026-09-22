@@ -157,6 +157,7 @@ class JevTypeSafeAdapter(BaseAdapter):
             answers=answers,
             latency=LatencyRecord(client_ms=ms, route="typesafe", timestamp=time.time()),
             provider=ProviderRecord(adapter_id=self.adapter_id, model_id_requested=self.model_id, model_id_returned=data.get("model"),
+                                    version_hash=str(data.get("model") or self.model_id),
                                     generation_id=headers.get("x-request-id") or headers.get("request-id"), route="typesafe",
                                     billed_input_tokens=in_tok, billed_output_tokens=usage.get("output_tokens"),
                                     cost_usd=(in_tok / 1e6 * PRICE_PER_M_INPUT) if in_tok is not None else None),
