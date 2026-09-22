@@ -8,3 +8,5 @@ cache.sqlite
 data/manifests/private/*.jsonl
 .pytest_cache/
 .ruff_cache/
+.env
+

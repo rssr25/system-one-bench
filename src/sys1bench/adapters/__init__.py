@@ -5,6 +5,7 @@ from . import (  # noqa: F401
     generic_http,
     hybrid_router,
     jev_openrouter,
+    jev_typesafe,
     laya_local,
     majority_prior,
     mock,

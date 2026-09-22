@@ -116,3 +116,26 @@ def test_decomposition_and_prior_shift():
     shifted = resample_prior_shift(items, "is_phishing", "true", 0.8, n=100)
     share = np.mean([it.questions["is_phishing"].ground_truth for it in shifted])
     assert 0.75 <= share <= 0.85 and shifted[0].controls.prior_shift.startswith("is_phishing")
+
+
+def test_typesafe_and_laya_parse_shapes():
+    from sys1bench.adapters.jev_typesafe import parse_answer as ts_parse
+    from sys1bench.adapters.jev_typesafe import to_vendor_question as ts_q
+    from sys1bench.adapters.laya_local import parse_answer as laya_parse
+    from sys1bench.adapters.laya_local import to_vendor_question as laya_q
+
+    q = Question(type="choice", instructions="x", criteria=[Option(key="a", description="A"), Option(key="b")])
+    assert ts_q(q)["criteria"] == {"a": "A", "b": None}
+    a = ts_parse(q, {"type": "choice", "choice": "a", "probabilities": {"a": 0.88, "b": 0.12}, "confidence": 0.76})
+    assert a.argmax == "a" and a.confidence == 0.76 and a.quantisation_step == 0.01
+    s = Question(type="score", instructions="s", criteria=[Level(level=0, description="lo"), Level(level=2, description="mid"), Level(level=4, description="hi")])
+    assert ts_q(s)["criteria"] == ["lo", "mid", "hi"]
+    sa = ts_parse(s, {"type": "score", "score": 1.05, "legend": {"0": "lo", "1": "mid", "2": "hi"}, "probabilities": {"0": 0.0, "1": 0.95, "2": 0.05}, "confidence": 0.92})
+    assert sa.argmax == "2" and sa.probs == [0.0, 0.95, 0.05]  # index 1 maps to level value 2
+    n = Question(type="noul", instructions="y?")
+    assert ts_parse(n, {"type": "noul", "noul": 0.95}).probs[0] == 0.95
+    la = laya_parse(q, {"type": "choice", "choice": "b", "probabilities": {"a": 0.3, "b": 0.7}, "confidence": 0.4, "action": {"act_probability": 0.2}})
+    assert la.argmax == "b" and la.abstained is True
+    ln = laya_parse(n, {"type": "noul", "noul": 0.9707, "confidence": 0.9707, "action": {"act_probability": 1.0}})
+    assert ln.argmax == "true" and ln.abstained is False
+    assert laya_q(q)["criteria"] == {"a": "A", "b": "b"}

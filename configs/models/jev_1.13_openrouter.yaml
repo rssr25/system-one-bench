@@ -1,0 +1,3 @@
+adapter: jev_openrouter
+model_id: typesafe/jev-1.13     # OpenRouter alpha Decisions API route (needs OPENROUTER_API_KEY)
+route: openrouter

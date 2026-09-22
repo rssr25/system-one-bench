@@ -1,125 +1,155 @@
-"""Convai Laya, run locally (Apache 2.0). Requires `pip install laya` (or the package from
-github.com/NandhaKishorM/laya) plus torch. Exposes the option token budget (`head_max_len`) and
-context (`max_len`) as tunables so Suite C can ablate them; the 77-label collapse at the default
-budget is a configuration effect that must be separated from architecture.
+"""Convai Laya, run locally (Apache 2.0) through the `laya` package's Router (verified against laya 0.3.4).
 
-Checkpoints: laya (ModernBERT-large, 421M, ctx 512), laya-multilingual (mmBERT-base, 322M, ctx 1024),
-laya-typed-decisions (fine-tuned, ctx 1024). `checkpoint="router"` uses Laya's language router.
+    from laya import Router
+    router = Router(preload=True, device="cuda")
+    out = router.predict(state, questions, model=None | "english" | "multilingual" | "typed-decisions")
+
+Question shape matches TypeSafe's: choice criteria is {option: description}, score criteria is an ordered list of
+level descriptions, noul has no criteria. Answers:
+    choice -> {"type","choice","probabilities":{opt: p},"confidence","action":{"act_probability"}}
+    score  -> {"type","score","legend","probabilities":{"0": p,...},"confidence","action":{...}}
+    noul   -> {"type","noul": P(yes),"confidence","action":{...}}
+`action.act_probability` is Laya's act/escalate head; we treat act_probability < 0.5 as a native abstention.
+Result also carries "routing": {"model","repo","reason",...} and "usage".
+
+Tunables: `head_max_len` and `max_len` are set on the checkpoint's `agent.cfg` before inference (Suite C ablates them;
+the 77-label collapse at the default budget is a configuration effect). Checkpoint defaults: english 512/192,
+multilingual 1024/256, typed-decisions 1024/256. The package prints a warning and falls back to CPU when CUDA is
+unavailable or out of memory; we record the device actually used in `hardware` so latency tables stay honest.
 """
 
 from __future__ import annotations
 
+import platform
 import time
 from typing import Any
 
-from ..schemas import (
-    Answer,
-    DecisionRequest,
-    DecisionResponse,
-    LatencyRecord,
-    ModelCapabilities,
-    ProviderRecord,
-    Question,
-)
+from ..schemas import Answer, DecisionRequest, DecisionResponse, LatencyRecord, ModelCapabilities, ProviderRecord, Question
 from .base import BaseAdapter, finalize_answer, register
 
-CONTEXT = {"laya": 512, "laya-multilingual": 1024, "laya-typed-decisions": 1024, "router": 1024}
-DEFAULT_HEAD = {"laya": 192, "laya-multilingual": 256, "laya-typed-decisions": 192, "router": 256}
+CHECKPOINTS = {"english": ("convaiinnovations/laya", 512, 192), "multilingual": ("convaiinnovations/laya/multilingual", 1024, 256),
+               "typed-decisions": ("convaiinnovations/laya/typed-decisions", 1024, 256), "router": ("convaiinnovations/laya", 1024, 256)}
+ALIASES = {"laya": "english", "laya-multilingual": "multilingual", "laya-typed-decisions": "typed-decisions"}
 
 
-def _to_vendor_question(q: Question) -> dict[str, Any]:
+def to_vendor_question(q: Question) -> dict[str, Any]:
     if q.type == "noul":
         return {"type": "noul", "instructions": q.instructions}
     if q.type == "choice":
-        crit = [{"key": c.key, "description": c.description} for c in q.criteria]  # type: ignore[union-attr]
+        crit = {c.key: (c.description or c.key) for c in q.criteria}  # type: ignore[union-attr]
         if q.allow_abstain:
-            crit.append({"key": q.abstain_key, "description": "None of the listed options applies."})
+            crit[q.abstain_key] = "None of the listed options applies."
         return {"type": "choice", "instructions": q.instructions, "criteria": crit}
     return {"type": "score", "instructions": q.instructions,
-            "criteria": [{"level": c.level, "description": c.description} for c in q.criteria]}  # type: ignore[union-attr]
+            "criteria": [(c.description or f"level {c.level}") for c in q.criteria]}  # type: ignore[union-attr]
 
 
-def parse_answer(q: Question, payload: dict[str, Any]) -> Answer:
+def parse_answer(q: Question, payload: dict[str, Any], abstain_threshold: float = 0.5) -> Answer:
     keys = q.option_keys
     conf = payload.get("confidence")
+    act = (payload.get("action") or {}).get("act_probability")
+    abstained = act is not None and float(act) < abstain_threshold
     if q.type == "noul":
-        p = payload.get("probability", payload.get("p_true"))
+        p = payload.get("noul")
         if p is None:
-            return Answer.failed(q, "no probability")
-        return finalize_answer(q, [float(p), 1 - float(p)], confidence=conf)
-    dist = payload.get("probabilities", payload.get("distribution"))
-    if isinstance(dist, dict):
-        probs = [float(dist.get(k, dist.get(int(k) if k.isdigit() else k, 0.0))) for k in keys]
-    elif isinstance(dist, list):
-        probs = [float(x) for x in dist[: len(keys)]]
+            return Answer.failed(q, "no noul field")
+        a = finalize_answer(q, [float(p), 1.0 - float(p)], confidence=None, abstained=abstained)
     else:
-        return Answer.failed(q, "no distribution")
-    escalate = bool(payload.get("escalate", False))
-    if q.allow_abstain and isinstance(dist, dict) and q.abstain_key in dist:
-        s = sum(probs)
-        probs = [p / s for p in probs] if s > 0 else probs
-    return finalize_answer(q, probs, confidence=conf, abstained=escalate)
+        dist = payload.get("probabilities")
+        if not isinstance(dist, dict):
+            return Answer.failed(q, "no probabilities map")
+        if q.type == "score":
+            probs = [float(dist.get(str(i), 0.0)) for i in range(len(keys))]
+        else:
+            probs = [float(dist.get(k, 0.0)) for k in keys]
+            if q.allow_abstain and q.abstain_key in dist:
+                abstained = abstained or float(dist[q.abstain_key]) >= max(probs)
+                s = sum(probs)
+                probs = [x / s for x in probs] if s > 0 else [1.0 / len(keys)] * len(keys)
+        a = finalize_answer(q, probs, confidence=conf, abstained=abstained)
+    if a.ok and act is not None:
+        a = a.model_copy(update={"raw_prob_sum": a.raw_prob_sum})
+    return a
 
 
 @register("laya_local")
 class LayaLocalAdapter(BaseAdapter):
-    def __init__(self, model_id: str = "convaiinnovations/laya", checkpoint: str = "laya", device: str = "cuda",
+    def __init__(self, model_id: str = "convaiinnovations/laya", checkpoint: str = "english", device: str = "cuda",
                  head_max_len: int | None = None, max_len: int | None = None, batch_size: int = 1,
-                 hardware: str | None = None, **tunables) -> None:
+                 hardware: str | None = None, abstain_threshold: float = 0.5, **tunables) -> None:
         super().__init__(model_id, **tunables)
-        self.checkpoint, self.device, self.batch_size, self.hardware = checkpoint, device, batch_size, hardware
-        self.head_max_len = head_max_len or DEFAULT_HEAD[checkpoint]
-        self.max_len = max_len or CONTEXT[checkpoint]
+        checkpoint = ALIASES.get(checkpoint, checkpoint)
+        if checkpoint not in CHECKPOINTS:
+            raise ValueError(f"unknown Laya checkpoint {checkpoint!r}; known: {sorted(CHECKPOINTS)} (+ aliases {sorted(ALIASES)})")
+        self.checkpoint, self.device, self.batch_size, self.abstain_threshold = checkpoint, device, batch_size, abstain_threshold
+        _, dflt_max, dflt_head = CHECKPOINTS[checkpoint]
+        self.head_max_len = head_max_len or dflt_head
+        self.max_len = max_len or dflt_max
+        self.hardware = hardware
         self.tunables.update({"head_max_len": self.head_max_len, "max_len": self.max_len, "checkpoint": checkpoint})
-        self._model = None
+        self._router = None
 
     @property
     def capabilities(self) -> ModelCapabilities:
-        per_opt = max(1, self.head_max_len // 4)
-        return ModelCapabilities(name=f"{self.model_id}:{self.checkpoint}", deployment="local", max_options=255,
+        return ModelCapabilities(name=f"laya:{self.checkpoint}", deployment="local", max_options=255,
                                  max_state_tokens=self.max_len - self.head_max_len, emits_confidence=True,
                                  supports_native_abstain=True, supports_batching=True,
-                                 languages={"en"} if self.checkpoint == "laya" else None,
-                                 tunables={"head_max_len": self.head_max_len, "max_len": self.max_len,
-                                           "approx_tokens_per_option_at_20": per_opt})
+                                 languages={"en"} if self.checkpoint == "english" else None,
+                                 tunables={"head_max_len": self.head_max_len, "max_len": self.max_len})
 
     def _load(self):
-        if self._model is not None:
-            return self._model
+        if self._router is not None:
+            return self._router
         try:
-            import laya  # type: ignore
+            from laya import Router  # type: ignore
         except ImportError as e:  # pragma: no cover
             raise RuntimeError("install Laya: pip install laya (github.com/NandhaKishorM/laya)") from e
-        if self.checkpoint == "router":
-            self._model = laya.Router(preload=True)
-        else:
-            self._model = laya.Laya.from_pretrained(self.checkpoint, device=self.device)  # type: ignore[attr-defined]
-        return self._model
+        self._router = Router(preload=True, device=self.device)
+        agents = getattr(self._router, "_agents", {}) or {}
+        targets = list(agents.values()) if self.checkpoint == "router" else [agents.get(self.checkpoint)]
+        for ag in targets:
+            if ag is not None and hasattr(ag, "cfg"):
+                ag.cfg["head_max_len"] = self.head_max_len
+                ag.cfg["max_len"] = self.max_len
+        ag = agents.get("english") or next(iter(agents.values()), None)
+        dev = str(getattr(ag, "device", self.device)) if ag is not None else self.device
+        if self.hardware is None:
+            gpu = None
+            try:
+                import torch  # type: ignore
+
+                if "cuda" in dev and torch.cuda.is_available():
+                    gpu = torch.cuda.get_device_name(0)
+            except Exception:  # pragma: no cover
+                pass
+            self.hardware = f"{gpu} ({dev})" if gpu else f"CPU {platform.machine()} ({dev})"
+        return self._router
 
     def decide(self, request: DecisionRequest) -> DecisionResponse:
-        model = self._load()
-        vq = {k: _to_vendor_question(q) for k, q in request.questions.items()}
-        kwargs = {"head_max_len": self.head_max_len, "max_len": self.max_len}
+        router = self._load()
+        vq = {k: to_vendor_question(q) for k, q in request.questions.items()}
+        model = None if self.checkpoint == "router" else self.checkpoint
         t0 = time.perf_counter()
         try:
-            out = model.predict(request.state, vq, **kwargs)
-        except TypeError:
-            out = model.predict(request.state, vq)
+            out = router.predict(request.state, vq, model=model)
+        except Exception as e:
+            return DecisionResponse(
+                answers={k: Answer.failed(q, "adapter_exception") for k, q in request.questions.items()},
+                latency=LatencyRecord(client_ms=float("nan"), timestamp=time.time()),
+                provider=ProviderRecord(adapter_id=self.adapter_id, model_id_requested=self.model_id, hardware=self.hardware),
+                transport_error=repr(e)[:500])
         ms = (time.perf_counter() - t0) * 1000
-        raw_answers = out.get("answers", out) if isinstance(out, dict) else {}
-        truncated = bool(out.get("truncated", False)) if isinstance(out, dict) else False
-        answers = {}
-        for k, q in request.questions.items():
-            p = raw_answers.get(k)
-            a = parse_answer(q, p) if isinstance(p, dict) else Answer.failed(q, "missing answer")
-            a.truncated = truncated
-            answers[k] = a
+        raw_answers = out.get("answers", {}) if isinstance(out, dict) else {}
+        answers = {k: (parse_answer(q, raw_answers[k], self.abstain_threshold) if isinstance(raw_answers.get(k), dict)
+                       else Answer.failed(q, "missing answer")) for k, q in request.questions.items()}
+        routing = out.get("routing", {}) if isinstance(out, dict) else {}
+        usage = out.get("usage", {}) if isinstance(out, dict) else {}
         return DecisionResponse(
             answers=answers,
             latency=LatencyRecord(client_ms=ms, compute_ms=ms, batch_size=self.batch_size, timestamp=time.time()),
             provider=ProviderRecord(adapter_id=self.adapter_id, model_id_requested=self.model_id,
-                                    model_id_returned=str(out.get("model", self.checkpoint)) if isinstance(out, dict) else self.checkpoint,
-                                    version_hash=str(out.get("routing", {}).get("checkpoint", self.checkpoint)) if isinstance(out, dict) else None,
-                                    hardware=self.hardware, cost_usd=0.0),
+                                    model_id_returned=f"laya:{routing.get('model', self.checkpoint)}",
+                                    version_hash=f"{routing.get('repo', '')}|head{self.head_max_len}|max{self.max_len}",
+                                    hardware=self.hardware, billed_input_tokens=usage.get("input_tokens"), cost_usd=0.0),
             raw=out if isinstance(out, dict) else {"out": str(out)},
         )
