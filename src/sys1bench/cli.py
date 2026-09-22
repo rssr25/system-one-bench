@@ -123,9 +123,6 @@ def canary(adapter: str, model: str | None = None, manifest: Path = Path("data/c
         raise typer.Exit(code=2)
 
 
-if __name__ == "__main__":
-    app()
-
 
 @app.command("sweep-cardinality")
 def sweep_cardinality(out: Path, adapter: Optional[str] = None, model: Optional[str] = None, config: Optional[Path] = None,
@@ -217,3 +214,7 @@ def robustness(out: Path, adapter: Optional[str] = None, model: Optional[str] = 
         typer.echo(f"perturb {kind:16s} " + "  ".join(f"{q}: dAcc={v['accuracy_delta']:+.3f} JSD={v['jsd_vs_clean']:.4f}" for q, v in d.items()))
     for dens, d in res.get("distractors", {}).items():
         typer.echo(f"distractor {dens:<5} " + "  ".join(f"{q}: dAcc={v['accuracy_delta']:+.3f} JSD={v['jsd_vs_clean']:.4f}" for q, v in d.items()))
+
+
+if __name__ == "__main__":
+    app()
