@@ -11,7 +11,7 @@ $S1B generate support_tickets "$OUT/tickets_noisy.jsonl" --n 500 --seed 44 --lab
 $S1B generate phishing_email "$OUT/phish.jsonl" --n "$N" --seed 42
 declare -A FR=([tickets]=support_tickets [phish]=phishing_email)
 for m in tickets phish; do
-  $S1B run "$OUT/$m.jsonl" "$OUT/preds_$m.jsonl" --config "$CFG" --framings "data/framings/${FR[$m]}.yaml" \
+  $S1B run "$OUT/$m.jsonl" "$OUT/preds_$m.jsonl" --config "$CFG" --framings "${FR[$m]}" \
     --permutations "${PERMS:-5}" --corruption --short-circuit --concurrency "${CONC:-4}" --cache "$OUT/cache.sqlite" --suite A
 done
 $S1B run "$OUT/tickets_unknowable.jsonl" "$OUT/preds_unknowable.jsonl" --config "$CFG" --cache "$OUT/cache.sqlite" --suite A

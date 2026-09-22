@@ -1,6 +1,7 @@
 
 import numpy as np
 
+from sys1bench.data import framings_path
 from sys1bench.framing import (
     apply_corruption,
     decompose_fixed_rule,
@@ -43,7 +44,7 @@ def test_knobs():
 
 def test_framing_expansion_and_controls():
     items = get_generator("support_tickets", n=5, seed=1).generate()
-    fr = load_framings("data/framings/support_tickets.yaml")
+    fr = load_framings(framings_path("support_tickets"))
     rows = expand_framings(items, fr)
     ids = {q.framing_id for r in rows for q in r.questions.values()}
     assert {"f0", "para1", "para5", "crit_label_only", "crit_with_negatives", "crit_vague"} <= ids

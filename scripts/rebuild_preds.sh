@@ -8,7 +8,7 @@ CFG=${1:?model config yaml}; OUT=${2:?results dir}; PERMS=${3:-${PERMS:-3}}
 declare -A FR=([tickets]=support_tickets [phish]=phishing_email)
 for m in tickets phish; do
   [ -f "$OUT/$m.jsonl" ] || continue
-  $S1B run "$OUT/$m.jsonl" "$OUT/preds_$m.jsonl" --config "$CFG" --framings "data/framings/${FR[$m]}.yaml" \
+  $S1B run "$OUT/$m.jsonl" "$OUT/preds_$m.jsonl" --config "$CFG" --framings "${FR[$m]}" \
     --permutations "$PERMS" --corruption --short-circuit --concurrency "${CONC:-4}" --cache "$OUT/cache.sqlite" --suite A
 done
 [ -f "$OUT/tickets_unknowable.jsonl" ] && $S1B run "$OUT/tickets_unknowable.jsonl" "$OUT/preds_unknowable.jsonl" --config "$CFG" --cache "$OUT/cache.sqlite" --suite A

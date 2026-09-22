@@ -10,3 +10,6 @@ data/manifests/private/*.jsonl
 .ruff_cache/
 .env
 
+
+dist/
+build/

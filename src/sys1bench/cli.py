@@ -1,7 +1,7 @@
 """sys1bench CLI.
 
   sys1bench generate support_tickets --n 1000 --seed 42 --out data/manifests/generated/tickets.jsonl
-  sys1bench run --manifest ... --adapter jev_openrouter --model typesafe/jev-1.13 --framings data/framings/support_tickets.yaml
+  sys1bench run --manifest ... --adapter jev_openrouter --model typesafe/jev-1.13 --framings support_tickets
   sys1bench score --predictions results/preds.jsonl --out results/summary.json
   sys1bench canary --adapter jev_openrouter --model typesafe/jev-1.13
 """
@@ -15,7 +15,9 @@ from typing import Optional
 import typer
 import yaml
 
+from . import __version__
 from .adapters import get_adapter, list_adapters
+from .data import framings_path
 from .framing import apply_corruption, expand_framings, permute_options, strip_options, strip_state
 from .framing.expand import load_framings
 from .generators import GENERATORS, get_generator
@@ -24,7 +26,16 @@ from .runners import ResponseCache, load_manifest, run_items, write_manifest, wr
 from .runners.benchmark_runner import load_predictions
 from .runners.canary import run_canary
 
-app = typer.Typer(add_completion=False, help="Benchmark harness for typed System One decision models.")
+app = typer.Typer(add_completion=False, help="sys1bench: benchmark harness for typed System One decision models (choice / score / noul).")
+
+
+@app.callback(invoke_without_command=True)
+def _main(ctx: typer.Context, version: bool = typer.Option(False, "--version", "-V", help="Print version and exit.")):
+    if version:
+        typer.echo(f"sys1bench {__version__}")
+        raise typer.Exit()
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
 
 
 def _adapter_from(adapter: str | None, model: str | None, config: str | None):
@@ -78,7 +89,7 @@ def run(manifest: Path, out: Path, adapter: str | None = None, model: str | None
         ad.fit(items)
     rows_all = []
     if framings:
-        items = expand_framings(items, load_framings(framings))
+        items = expand_framings(items, load_framings(framings_path(framings)))
     if permutations:
         items = permute_options(items, permutations)
     c = ResponseCache(cache)

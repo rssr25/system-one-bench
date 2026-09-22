@@ -11,6 +11,7 @@ from sys1bench.analysis import (
     paired_bootstrap,
     short_circuit_report,
 )
+from sys1bench.data import framings_path
 from sys1bench.framing import expand_framings, permute_options, strip_options, strip_state
 from sys1bench.framing.expand import load_framings
 from sys1bench.generators import get_generator
@@ -46,7 +47,7 @@ def test_jev_parse_shapes():
 
 def test_end_to_end_mock(tmp_path):
     items = get_generator("support_tickets", n=120, seed=1).generate()
-    fr = load_framings("data/framings/support_tickets.yaml")
+    fr = load_framings(framings_path("support_tickets"))
     rows_items = permute_options(expand_framings(items, fr), 2)
     cache = ResponseCache(tmp_path / "c.sqlite")
     good = get_adapter("mock", skill=0.7, temperature=0.5, quantise=0.01)  # clearly over-confident
@@ -159,7 +160,7 @@ def test_sweeps_and_report(tmp_path):
     d = tmp_path / "mock"
     d.mkdir()
     write_manifest(items, d / "tickets.jsonl")
-    fr = load_framings("data/framings/support_tickets.yaml")
+    fr = load_framings(framings_path("support_tickets"))
     rows = run_items(permute_options(expand_framings(items, fr), 2), m, suite="A", arm="main")
     rows += run_items(strip_state(items), m, arm="state_only") + run_items(strip_options(items), m, arm="options_only")
     write_predictions(rows, d / "preds_tickets.jsonl")
@@ -224,7 +225,7 @@ def test_robustness_suite_mock(tmp_path):
 
 def test_scorecard_dedupes_repeated_sibling_rows():
     items = get_generator("support_tickets", n=30, seed=2).generate()
-    fr = load_framings("data/framings/support_tickets.yaml")
+    fr = load_framings(framings_path("support_tickets"))
     rows = run_items(expand_framings(items, fr), get_adapter("mock", skill=0.8), arm="main")
     angry = [r for r in rows if r.question_key == "is_angry"]
     assert len(angry) > 30 * 6  # raw rows include duplicates from queue criteria variants

@@ -1,10 +1,26 @@
 [project]
 name = "sys1bench"
-version = "0.2.0"
-description = "Benchmark harness for typed System One decision models (choice / score / noul)."
+version = "0.3.0"
+description = "Benchmark harness for typed System One decision models (choice / score / noul): calibration vs noise floor, framing sensitivity, selective prediction, ordinal fidelity, interference, robustness."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Rahul Sharma", email = "rsharma@rptu.de" }]
+keywords = ["benchmark", "calibration", "system-one", "decision-models", "jev", "laya", "evaluation", "llm"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Testing",
+  "Operating System :: OS Independent",
+  "Typing :: Typed",
+]
 dependencies = [
   "numpy>=1.26",
   "scipy>=1.11",
@@ -16,9 +32,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+plots = ["matplotlib>=3.8"]
 local = ["torch>=2.4", "transformers>=4.45", "sentence-transformers>=3.0"]
+laya = ["laya>=0.3"]
 llm = ["vllm>=0.6", "outlines>=0.1"]
-dev = ["pytest>=8.0", "ruff>=0.6", "matplotlib>=3.8"]
+dev = ["pytest>=8.0", "ruff>=0.6", "matplotlib>=3.8", "build>=1.2", "twine>=5.0"]
+
+[project.urls]
+Homepage = "https://github.com/rssr25/system-one-bench"
+Documentation = "https://github.com/rssr25/system-one-bench/blob/main/docs/SPEC_v2.md"
+Results = "https://github.com/rssr25/system-one-bench/blob/main/docs/RESULTS_2026-09-22_narrative.md"
+Issues = "https://github.com/rssr25/system-one-bench/issues"
+Changelog = "https://github.com/rssr25/system-one-bench/blob/main/CHANGELOG.md"
 
 [project.scripts]
 sys1bench = "sys1bench.cli:app"
@@ -32,6 +57,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"sys1bench.data" = ["framings/*.yaml", "canary/*.jsonl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
