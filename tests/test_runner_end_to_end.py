@@ -299,6 +299,6 @@ def test_dashboard_and_latex_build(tmp_path):
     rows = run_items(expand_framings(items, load_framings(framings_path("support_tickets"))), get_adapter("mock", skill=0.8), arm="main")
     write_predictions(rows, d / "preds_tickets.jsonl")
     html = build_dashboard([d])
-    assert "<canvas" in html and "mock-v1" in html and "NaN" not in html
+    assert "createElement('canvas')" in html and "mock-v1" in html and "NaN" not in html
     tex = latex_table({"tickets.queue": {"primitive": "choice", "accuracy": 0.8, "accuracy_range": [0.7, 0.9]}}, "cap", "tab:x")
     assert r"\begin{table}" in tex and "0.800" in tex
