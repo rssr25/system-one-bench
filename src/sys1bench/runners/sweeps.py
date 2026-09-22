@@ -10,6 +10,7 @@ question as a function of Q.
 
 from __future__ import annotations
 
+import collections
 import copy
 import random
 from typing import Any
@@ -29,7 +30,9 @@ from .cache import ResponseCache
 def _summ(rows: list[PredictionRow]) -> dict[str, Any]:
     ok = [r for r in rows if r.error is None and r.correct is not None]
     if not ok:
-        return {"n": 0}
+        errs = collections.Counter((r.error or "").split(":")[0] for r in rows if r.error)
+        return {"n": 0, "error_rate": float(np.mean([r.error is not None for r in rows])) if rows else float("nan"),
+                "error_kinds": dict(errs), "latency": latency_summary(np.array([r.latency_ms for r in rows]))}
     conf = np.array([max(r.probs) for r in ok])
     corr = np.array([float(r.correct) for r in ok])
     e = ece(conf, corr, 15)

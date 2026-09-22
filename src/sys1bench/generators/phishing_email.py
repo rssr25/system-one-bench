@@ -43,7 +43,7 @@ NAMES = ["Alex", "Priya", "Jordan", "Mei", "Sam", "Fatima", "Luca", "Noor"]
 
 @register_generator("phishing_email")
 class PhishingEmailGenerator(BaseGenerator):
-    version = "1.0.0"
+    version = "1.0.1"
 
     def generate(self) -> list[TaskItem]:
         kb = self.knobs
@@ -87,7 +87,9 @@ class PhishingEmailGenerator(BaseGenerator):
                 "asks_credentials": ("Does the message ask the recipient to log in, verify, or reset credentials via a link?", cls == "credential_harvest"),
                 "urgent_language": ("Does the message pressure the recipient to act within 24 hours or threaten consequences?", urg >= 3),
                 "payment_redirect": ("Does the message ask to change payment details or send money or gift cards?", cls in ("invoice_fraud", "ceo_fraud")),
-                "unexpected_attachment": ("Does the message urge opening an attachment the recipient did not request?", cls == "malware_attachment"),
+                # v1.0.1: invoice-fraud mails also push an unrequested attachment ("new account in the attached PDF"); the legit
+                # "Invoice attached" template was discussed on a call, so it stays false.
+                "unexpected_attachment": ("Does the message urge opening an attachment the recipient did not request?", cls in ("malware_attachment", "invoice_fraud")),
             }
             questions = {
                 "is_phishing": Question(type="noul", instructions="Is this email a phishing or social-engineering attack?",
