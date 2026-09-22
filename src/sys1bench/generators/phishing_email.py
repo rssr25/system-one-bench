@@ -48,8 +48,11 @@ class PhishingEmailGenerator(BaseGenerator):
     def generate(self) -> list[TaskItem]:
         kb = self.knobs
         rng = self.rng("items")
+        ctl = self.rng("controls")
         items: list[TaskItem] = []
         for i in range(kb.n):
+            distract = ctl.random() < kb.distractor_density
+            noise_draw = ctl.random() < kb.label_noise
             brand = rng.choice(BRANDS)
             legit_dom = LEGIT_DOMAINS[brand]
             name = rng.choice(NAMES)
@@ -67,16 +70,16 @@ class PhishingEmailGenerator(BaseGenerator):
             state = {"from": f"{brand} <no-reply@{sender_dom}>", "to": f"{name.lower()}@example-corp.com", "subject": subj,
                      "body": body, "attachments": ([f"file_{order}.{'zip' if cls == 'malware_attachment' else 'pdf'}"] if attach else []),
                      "known_brand_domain": legit_dom}
-            if rng.random() < kb.distractor_density:
+            if distract:
                 state["thread_history"] = "Earlier: 'Thanks for the quick turnaround last month!'"
             if kb.target_tokens:
-                state["footer"] = pad_to_tokens(rng, "", kb.target_tokens - int(len(body.split()) * 1.3))
+                state["footer"] = pad_to_tokens(ctl, "", kb.target_tokens - int(len(body.split()) * 1.3))
             noise = False
             truth_phish, truth_cls, truth_urg = is_phish, cls, urg
-            if kb.label_noise and rng.random() < kb.label_noise:
+            if kb.label_noise and noise_draw:
                 noise = True
                 truth_phish = not truth_phish
-                truth_cls = rng.choice([c[0] for c in CLASSES if c[0] != cls])
+                truth_cls = ctl.choice([c[0] for c in CLASSES if c[0] != cls])
             tid = f"phish_{kb.seed}_{i:05d}"
             # decomposition sub-questions (Suite B): each is a noul with rule-derived truth
             sub = {

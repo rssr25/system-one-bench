@@ -6,6 +6,7 @@ layer turns into `transport_failure_rate` and `schema_failure_rate`.
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -37,7 +38,20 @@ def write_predictions(rows: Iterable[PredictionRow], path: str | Path) -> None:
 
 
 def load_predictions(path: str | Path) -> list[PredictionRow]:
-    return [PredictionRow.model_validate_json(l) for l in Path(path).read_text().splitlines() if l.strip()]
+    """Reads prediction rows; repairs legacy rows whose failed answers carried NaN probabilities (serialised null)."""
+    rows = []
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        try:
+            rows.append(PredictionRow.model_validate_json(line))
+        except Exception:
+            d = json.loads(line)
+            if any(x is None for x in (d.get("probs") or [])):
+                d["probs"] = []
+                d["error"] = d.get("error") or "legacy_nan"
+            rows.append(PredictionRow.model_validate(d))
+    return rows
 
 
 def to_request(item: TaskItem, suite: str | None = None, arm: str | None = None) -> DecisionRequest:

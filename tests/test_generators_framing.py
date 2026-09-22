@@ -74,3 +74,19 @@ def test_rag_relevance_generator_cardinality():
             assert it.state["passages"][q.ground_truth].count(it.metadata["entity"]) >= 1
             assert it.questions["relevance"].ground_truth in (0, 1, 2, 3)
             assert it.questions["is_relevant"].ground_truth == (it.metadata["focus_grade"] == 3)
+
+
+def test_control_arms_pair_with_clean_manifest():
+    for name in ("support_tickets", "phishing_email"):
+        clean = get_generator(name, n=60, seed=5).generate()
+        for knobs in (dict(distractor_density=0.5), dict(label_noise=0.2), dict(target_tokens=800)):
+            arm = get_generator(name, n=60, seed=5, **knobs).generate()
+            assert [a.task_id for a in arm] == [c.task_id for c in clean]
+            if "label_noise" not in knobs:
+                for a, c in zip(arm, clean):
+                    assert {k: q.ground_truth for k, q in a.questions.items()} == {k: q.ground_truth for k, q in c.questions.items()}
+                    # content identical up to the injected material
+                    ca, cc = (a.state_text(), c.state_text())
+                    assert ca.startswith(cc[:60])
+            else:
+                assert any(a.label_provenance.noise_injected for a in arm)

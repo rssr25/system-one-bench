@@ -56,6 +56,7 @@ class RagRelevanceGenerator(BaseGenerator):
     def generate(self) -> list[TaskItem]:
         kb = self.knobs
         rng = self.rng("items")
+        ctl = self.rng("controls")
         K = max(2, min(kb.cardinality or 5, 255))
         items: list[TaskItem] = []
         for i in range(kb.n):
@@ -88,12 +89,13 @@ class RagRelevanceGenerator(BaseGenerator):
             focus_idx = rng.randrange(K) if rng.random() < 0.5 else ids.index(gold_id)
             focus_id, focus_grade = ids[focus_idx], passages[focus_idx][1]
             state = {"query": query, "passages": {pid: txt for pid, (txt, _) in zip(ids, passages)}, "focus": focus_id}
+            noise_draw = ctl.random() < kb.label_noise
             if kb.target_tokens:
-                state["notes"] = pad_to_tokens(rng, "", kb.target_tokens)
+                state["notes"] = pad_to_tokens(ctl, "", kb.target_tokens)
             noise = False
-            if kb.label_noise and rng.random() < kb.label_noise:
+            if kb.label_noise and noise_draw:
                 noise = True
-                gold_id = rng.choice([p for p in ids if p != gold_id])
+                gold_id = ctl.choice([p for p in ids if p != gold_id])
             tid = f"rag_{kb.seed}_K{K}_{i:05d}"
             items.append(TaskItem(
                 task_id=tid, tier="G", domain="rag_relevance", language=kb.language, state=state,

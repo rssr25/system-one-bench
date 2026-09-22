@@ -97,7 +97,8 @@ class SupportTicketGenerator(BaseGenerator):
 
     def generate(self) -> list[TaskItem]:
         kb = self.knobs
-        rng = self.rng("items")
+        rng = self.rng("items")          # content stream: identical across control arms
+        ctl = self.rng("controls")       # control stream: distractors, padding, label noise, unknowable, none-correct
         queues = self._queues()
         qkeys = [q[0] for q in queues]
         templates = [t for t in TEMPLATES if t[0] in qkeys] or TEMPLATES
@@ -106,20 +107,23 @@ class SupportTicketGenerator(BaseGenerator):
             queue, base, tmpl = rng.choice(templates)
             angry = rng.random() < 0.3
             tier = rng.choice(TIERS)
-            unknowable = rng.random() < kb.unknowable_frac
-            none_correct = rng.random() < kb.none_correct_frac
+            unknowable = ctl.random() < kb.unknowable_frac
+            none_correct = ctl.random() < kb.none_correct_frac
+            distract = ctl.random() < kb.distractor_density
+            noise_draw = ctl.random() < kb.label_noise
             body = tmpl.format(amt=rng.choice([19, 45, 89, 120, 249, 1200]), day=rng.choice(["Monday", "the 3rd", "yesterday", "Sept 14"]),
                                order=rng.randrange(10000, 99999), days=rng.randrange(2, 30), code=f"E{rng.randrange(100,999)}",
                                last4=rng.randrange(1000, 9999), region=rng.choice(["Germany", "Brazil", "Japan", "Canada"]),
                                device=rng.choice(["Pixel 8", "iPhone 15", "Galaxy S24"]))
             closing = rng.choice(ANGRY if angry else CALM)
-            ctx = f"Context: customer tier {tier}; account age {rng.randrange(1, 60)} months; open tickets {rng.randrange(0, 4)}."
+            age, open_t = rng.randrange(1, 60), rng.randrange(0, 4)
+            ctx = f"Context: customer tier {tier}; account age {age} months; open tickets {open_t}."
             if unknowable:
-                ctx = f"Context: account age {rng.randrange(1, 60)} months; open tickets {rng.randrange(0, 4)}."
+                ctx = f"Context: account age {age} months; open tickets {open_t}."
             state = f"Customer: \"{body} {closing}\"\n{ctx}"
-            if rng.random() < kb.distractor_density:
-                state += "\n" + rng.choice(DISTRACTORS)
-            state = pad_to_tokens(rng, state, kb.target_tokens)
+            if distract:
+                state += "\n" + ctl.choice(DISTRACTORS)
+            state = pad_to_tokens(ctl, state, kb.target_tokens)
 
             priority = min(4, base + (1 if angry else 0) + (1 if tier in ("gold", "enterprise") else 0))
             queue_truth = queue
@@ -129,10 +133,10 @@ class SupportTicketGenerator(BaseGenerator):
                 options = [o for o in options if o.key != queue] or options
                 queue_truth = "none_of_the_above"
             noise = False
-            if kb.label_noise and rng.random() < kb.label_noise:
+            if kb.label_noise and noise_draw:
                 noise = True
-                queue_truth = rng.choice([o.key for o in options if o.key != queue_truth] or [queue_truth])
-                priority = rng.choice([p for p in range(5) if p != priority])
+                queue_truth = ctl.choice([o.key for o in options if o.key != queue_truth] or [queue_truth])
+                priority = ctl.choice([p for p in range(5) if p != priority])
                 angry = not angry
 
             tid = f"tickets_{kb.seed}_{i:05d}"
