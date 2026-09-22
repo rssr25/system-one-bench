@@ -7,6 +7,7 @@ Benchmark harness for typed **System One decision models**: non-autoregressive m
 - [`docs/SPEC_v2.md`](docs/SPEC_v2.md): benchmark specification (suites, data tiers, metrics, statistics, audits, roadmap, future-model rules).
 - [`docs/REVIEW_v1.md`](docs/REVIEW_v1.md): review of the original spec against the public state of the art (2026-09-22).
 - [`docs/spec_v1_original.md`](docs/spec_v1_original.md): the original specification, kept for diffing.
+- [`docs/RESULTS_2026-09-22_narrative.md`](docs/RESULTS_2026-09-22_narrative.md): first live results (Jev 1.13.0, Laya 0.3.4), findings F1-F9, caveats; generated tables in `docs/RESULTS_2026-09-22.md`.
 
 ## Design principles
 
@@ -91,6 +92,6 @@ configs/            model configs (Jev, Laya, hybrid, future-vendor template), s
 | Suite J (agentic closed loop) | todo |
 | Tier P public manifests, Tier H collection | todo |
 | Plots (reliability, risk-coverage, scaling, interference matrix), LaTeX export | todo |
-| First live results (Jev 1.13.0 Suite A n=500; Laya english n=200 on CPU) | running 2026-09-22 |
+| First live results: Jev 1.13.0 and Laya english/typed-decisions on identical Tier G manifests (n=500, 3 permutations, 5 paraphrases), Suites A-E, baselines | done 2026-09-22; see [`docs/RESULTS_2026-09-22_narrative.md`](docs/RESULTS_2026-09-22_narrative.md) and `results/REPORT.md` (regenerate with `scripts/finalize_results.sh`) |
 
 Known limitation: the two generators use fixed templates, so a regex baseline saturates on `queue`. Next generator iteration adds surface variation (paraphrased templates, typos, multilingual) while keeping rule-derived labels.
