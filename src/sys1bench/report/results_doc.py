@@ -202,7 +202,10 @@ def sweeps_section(d: Path, model_label: str) -> str:
         for L in sorted(res):
             v = res[L]
             q0 = v["by_question"][qs[0]]
-            lines.append(f"| {L} | {v['state_tokens_mean']:.0f} | " + " | ".join(_f(v["by_question"][q].get("accuracy")) for q in qs) + f" | {_f(q0.get('error_rate'))} | {_f(q0.get('latency', {}).get('p50'), 0)} |")
+            err = _f(q0.get("error_rate"))
+            if q0.get("error_kinds"):
+                err += " (" + ", ".join(f"{k} {n}" for k, n in q0["error_kinds"].items()) + ")"
+            lines.append(f"| {L} | {v['state_tokens_mean']:.0f} | " + " | ".join(_f(v["by_question"][q].get("accuracy")) for q in qs) + f" | {err} | {_f(q0.get('latency', {}).get('p50'), 0)} |")
     for p in sorted(d.glob("interference_*.json")):
         res = _load_json(p)
         lines.append(f"\n**Multi-question interference** (target `{res['target']}`, n={res['n_items']}, {model_label}); alone accuracy {_f(res['alone'].get('accuracy'))}\n\n| co-asked kind | Q | JSD vs alone | argmax flips | Δ accuracy | p50 ms | cost / question |\n|---|---|---|---|---|---|---|")
