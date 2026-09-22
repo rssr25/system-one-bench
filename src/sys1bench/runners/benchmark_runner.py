@@ -50,6 +50,8 @@ def load_predictions(path: str | Path) -> list[PredictionRow]:
             if any(x is None for x in (d.get("probs") or [])):
                 d["probs"] = []
                 d["error"] = d.get("error") or "legacy_nan"
+            if d.get("latency_ms") is None:
+                d["latency_ms"] = float("nan")
             rows.append(PredictionRow.model_validate(d))
     return rows
 
