@@ -76,12 +76,13 @@ def parse_answer(q: Question, payload: dict[str, Any], abstain_threshold: float 
 class LayaLocalAdapter(BaseAdapter):
     def __init__(self, model_id: str = "convaiinnovations/laya", checkpoint: str = "english", device: str = "cuda",
                  head_max_len: int | None = None, max_len: int | None = None, batch_size: int = 1,
-                 hardware: str | None = None, abstain_threshold: float = 0.5, **tunables) -> None:
+                 hardware: str | None = None, abstain_threshold: float = 0.5, strict_device: bool = True, **tunables) -> None:
         super().__init__(model_id, **tunables)
         checkpoint = ALIASES.get(checkpoint, checkpoint)
         if checkpoint not in CHECKPOINTS:
             raise ValueError(f"unknown Laya checkpoint {checkpoint!r}; known: {sorted(CHECKPOINTS)} (+ aliases {sorted(ALIASES)})")
         self.checkpoint, self.device, self.batch_size, self.abstain_threshold = checkpoint, device, batch_size, abstain_threshold
+        self.strict_device = strict_device
         _, dflt_max, dflt_head = CHECKPOINTS[checkpoint]
         self.head_max_len = head_max_len or dflt_head
         self.max_len = max_len or dflt_max
@@ -104,14 +105,32 @@ class LayaLocalAdapter(BaseAdapter):
             from laya import Router  # type: ignore
         except ImportError as e:  # pragma: no cover
             raise RuntimeError("install Laya: pip install laya (github.com/NandhaKishorM/laya)") from e
-        self._router = Router(preload=True, device=self.device)
-        agents = getattr(self._router, "_agents", {}) or {}
-        targets = list(agents.values()) if self.checkpoint == "router" else [agents.get(self.checkpoint)]
-        for ag in targets:
-            if ag is not None and hasattr(ag, "cfg"):
+        # Lazy router: load only the checkpoint we evaluate (preloading all three needs ~6 GB and, on a shared GPU,
+        # silently lands on CPU). "router" mode keeps the full preload because it dispatches per language.
+        if self.checkpoint == "router":
+            self._router = Router(preload=True, device=self.device)
+            agents = list((getattr(self._router, "_agents", {}) or {}).values())
+        else:
+            self._router = Router(preload=False, device=self.device)
+            agents = [self._router.load(self.checkpoint)]
+        for ag in agents:
+            if hasattr(ag, "cfg"):
                 ag.cfg["head_max_len"] = self.head_max_len
                 ag.cfg["max_len"] = self.max_len
-        ag = agents.get("english") or next(iter(agents.values()), None)
+            dev = str(getattr(ag, "device", ""))
+            if self.device.startswith("cuda") and "cuda" not in dev and hasattr(ag, "model"):
+                try:  # the package falls back to CPU when CUDA context creation fails at import; retry the move
+                    import torch  # type: ignore
+
+                    ag.model.to("cuda")
+                    ag.device = torch.device("cuda") if hasattr(torch, "device") else "cuda"
+                except Exception:
+                    pass
+            dev = str(getattr(ag, "device", ""))
+            if self.device.startswith("cuda") and "cuda" not in dev and self.strict_device:
+                raise RuntimeError(f"Laya checkpoint {self.checkpoint!r} loaded on {dev or 'cpu'} although device={self.device!r} was requested; "
+                                   "refusing to record CPU latency as GPU. Free GPU memory or pass strict_device=false.")
+        ag = agents[0] if agents else None
         dev = str(getattr(ag, "device", self.device)) if ag is not None else self.device
         if self.hardware is None:
             gpu = None
