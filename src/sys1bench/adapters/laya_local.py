@@ -168,7 +168,9 @@ class LayaLocalAdapter(BaseAdapter):
         ms = (time.perf_counter() - t0) * 1000
         raw_answers = out.get("answers", {}) if isinstance(out, dict) else {}
         # laya truncates silently to max_len - head_max_len state tokens and reports nothing; estimate it (~4 chars/token)
-        est_tokens = len(request.state_text()) / 4
+        from ..generators.base import estimate_tokens
+
+        est_tokens = estimate_tokens(request.state_text())
         truncated = bool(out.get("truncated", False)) if isinstance(out, dict) else False
         truncated = truncated or est_tokens > (self.max_len - self.head_max_len)
         answers = {}

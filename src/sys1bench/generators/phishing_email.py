@@ -5,8 +5,10 @@ mismatch, unexpected attachment) combined by a fixed rule.
 
 from __future__ import annotations
 
+import json
+
 from ..schemas import Controls, LabelProvenance, Level, Option, Question, TaskItem
-from .base import BaseGenerator, canary_for, pad_to_tokens, register_generator
+from .base import BaseGenerator, canary_for, estimate_tokens, pad_to_tokens, register_generator
 
 BRANDS = ["Northwind Bank", "Contoso Cloud", "Fabrikam Shipping", "Tailspin Payroll", "Woodgrove HR"]
 LEGIT_DOMAINS = {"Northwind Bank": "northwindbank.com", "Contoso Cloud": "contoso.com", "Fabrikam Shipping": "fabrikam.com",
@@ -73,7 +75,7 @@ class PhishingEmailGenerator(BaseGenerator):
             if distract:
                 state["thread_history"] = "Earlier: 'Thanks for the quick turnaround last month!'"
             if kb.target_tokens:
-                state["footer"] = pad_to_tokens(ctl, "", kb.target_tokens - int(len(body.split()) * 1.3))
+                state["footer"] = pad_to_tokens(ctl, "", kb.target_tokens - estimate_tokens(body))
             noise = False
             truth_phish, truth_cls, truth_urg = is_phish, cls, urg
             if kb.label_noise and noise_draw:
@@ -104,7 +106,7 @@ class PhishingEmailGenerator(BaseGenerator):
                                                  framing_group=f"phish.sub.{k}", decomposition_of="is_phishing")
             items.append(TaskItem(
                 task_id=tid, tier="G", domain="email_security", language=kb.language, state=state,
-                state_tokens=int(len(body.split()) * 1.3) + 40, questions=questions,
+                state_tokens=estimate_tokens(json.dumps(state)), questions=questions,
                 label_provenance=LabelProvenance(source="generator", generator=self.generator_id, seed=kb.seed, noise_injected=noise),
                 controls=Controls(distractor_density=kb.distractor_density), cost_matrix=self.cost_matrices(), canary=canary_for(tid),
                 metadata={"class": cls, "sender_domain": sender_dom, "decomposition_rule": "phishing if sender_mismatch or any of the other four"},

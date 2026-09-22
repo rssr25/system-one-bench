@@ -9,8 +9,10 @@ fraction of items. Nothing in the request text names the clause.
 
 from __future__ import annotations
 
+import json
+
 from ..schemas import Controls, LabelProvenance, Level, Option, Question, TaskItem
-from .base import BaseGenerator, canary_for, pad_to_tokens, register_generator
+from .base import BaseGenerator, canary_for, estimate_tokens, pad_to_tokens, register_generator
 
 # clause: (id, text, severity 1|2, violating request templates, compliant request templates)
 CLAUSES = [
@@ -66,7 +68,7 @@ class PolicyComplianceGenerator(BaseGenerator):
             options = [Option(key=cid, description=txt) for cid, txt, _, _, _ in clauses] + [Option(key="none", description="No clause is violated.")]
             tid = f"policy_{kb.seed}_{i:05d}"
             items.append(TaskItem(
-                task_id=tid, tier="G", domain="policy_compliance", language=kb.language, state=state, state_tokens=int(len(str(state).split()) * 1.4),
+                task_id=tid, tier="G", domain="policy_compliance", language=kb.language, state=state, state_tokens=estimate_tokens(json.dumps(state)),
                 questions={
                     "compliant": Question(type="noul", instructions="Can the request be fulfilled without violating any clause of `policy`?",
                                           ground_truth=compliant, framing_group="policy.compliant"),

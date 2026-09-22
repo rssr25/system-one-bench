@@ -9,7 +9,7 @@ calibrated model must spread mass over two adjacent levels.
 from __future__ import annotations
 
 from ..schemas import Controls, LabelProvenance, Level, Option, Question, TaskItem
-from .base import BaseGenerator, canary_for, pad_to_tokens, register_generator
+from .base import BaseGenerator, canary_for, estimate_tokens, pad_to_tokens, register_generator
 
 QUEUES = [
     ("billing", "Charges, refunds, invoices, duplicate payments, autopay problems"),
@@ -50,6 +50,14 @@ TEMPLATES = [
     ("technical", 1, "Notifications stopped arriving on {day}. Settings look correct. Device: {device}."),
 ]
 
+# Surface variants applied to the customer text (labels unaffected): openers, register, sign-offs, light typos.
+OPENERS = ["", "", "Hi,", "Hello team,", "Hey,", "Good morning.", "To whom it may concern,", "Quick one:", "ok so", "Hi there —"]
+REGISTER = {
+    "formal": lambda t: t, "casual": lambda t: t.replace("I was", "i was").replace("Please", "pls").replace("please", "pls").replace("Thanks", "thx"),
+    "terse": lambda t: t.rstrip(".") + ".", "verbose": lambda t: t + " I have been a customer for a while and this has never happened before.",
+}
+SIGNOFFS = ["", "", "Regards, {name}", "— {name}", "Thanks, {name}", "Sent from my phone", "Best, {name}"]
+NAMES = ["Priya", "Jonas", "Amara", "Luis", "Mei", "Tomasz", "Fatima", "Noah"]
 ANGRY = [
     "This is completely unacceptable and I am furious.",
     "Honestly, this is ridiculous. Fix it today or I'm done.",
@@ -86,7 +94,7 @@ PRIORITY_INSTRUCTIONS = (
 
 @register_generator("support_tickets")
 class SupportTicketGenerator(BaseGenerator):
-    version = "1.0.0"
+    version = "1.1.0"
 
     def _queues(self) -> list[tuple[str, str]]:
         k = self.knobs.cardinality or 6
@@ -116,11 +124,24 @@ class SupportTicketGenerator(BaseGenerator):
                                last4=rng.randrange(1000, 9999), region=rng.choice(["Germany", "Brazil", "Japan", "Canada"]),
                                device=rng.choice(["Pixel 8", "iPhone 15", "Galaxy S24"]))
             closing = rng.choice(ANGRY if angry else CALM)
+            # 1.1.0 surface diversity (content stream so arms stay paired)
+            opener = rng.choice(OPENERS)
+            reg = rng.choice(list(REGISTER))
+            body = REGISTER[reg](body)
+            signoff = rng.choice(SIGNOFFS).format(name=rng.choice(NAMES))
+            if rng.random() < 0.15:  # light typos in the body, never inside the order number
+                chars = list(body)
+                for _ in range(max(1, len(chars) // 60)):
+                    j = rng.randrange(len(chars))
+                    if chars[j].isalpha():
+                        chars[j] = rng.choice("abcdefghijklmnopqrstuvwxyz")
+                body = "".join(chars)
             age, open_t = rng.randrange(1, 60), rng.randrange(0, 4)
             ctx = f"Context: customer tier {tier}; account age {age} months; open tickets {open_t}."
             if unknowable:
                 ctx = f"Context: account age {age} months; open tickets {open_t}."
-            state = f"Customer: \"{body} {closing}\"\n{ctx}"
+            text = " ".join(x for x in (opener, body, closing, signoff) if x)
+            state = f"Customer: \"{text}\"\n{ctx}"
             if distract:
                 state += "\n" + ctl.choice(DISTRACTORS)
             state = pad_to_tokens(ctl, state, kb.target_tokens)
@@ -142,7 +163,7 @@ class SupportTicketGenerator(BaseGenerator):
             tid = f"tickets_{kb.seed}_{i:05d}"
             items.append(TaskItem(
                 task_id=tid, tier="G", domain="support_triage", language=kb.language, state=state,
-                state_tokens=int(len(state.split()) * 1.3),
+                state_tokens=estimate_tokens(state),
                 questions={
                     "queue": Question(type="choice", instructions="Which queue should handle this ticket?", criteria=options,
                                       ground_truth=queue_truth, framing_group="tickets.queue", allow_abstain=none_correct),
@@ -155,7 +176,7 @@ class SupportTicketGenerator(BaseGenerator):
                 controls=Controls(unknowable=unknowable, none_correct=none_correct, distractor_density=kb.distractor_density),
                 cost_matrix=self.cost_matrices(),
                 canary=canary_for(tid),
-                metadata={"template_queue": queue, "base_urgency": base, "tier": tier, "angry": angry},
+                metadata={"template_queue": queue, "base_urgency": base, "tier": tier, "angry": angry, "register": reg},
             ))
         return items
 

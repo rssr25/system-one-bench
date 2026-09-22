@@ -62,13 +62,19 @@ def pad_to_tokens(rng: random.Random, text: str, target_tokens: int | None) -> s
     if not target_tokens:
         return text
     parts = [text]
-    est = lambda s: int(len(s.split()) * 1.3)
+    est = estimate_tokens
     while est(" ".join(parts)) < target_tokens:
         f = rng.choice(FILLER).format(sid=rng.randrange(10**6), minor=rng.randrange(20), patch=rng.randrange(9),
                                       bucket=rng.choice("ABCD"), q=rng.randrange(1, 5), n=rng.randrange(1, 40),
                                       kb=rng.randrange(20, 4000), stars=rng.randrange(3, 6), tz=rng.choice(["-8", "-5", "+1", "+5:30"]))
         parts.append(f)
     return "\n".join(parts)
+
+
+def estimate_tokens(text: str) -> int:
+    """Approximate token count. Calibrated against Jev's billed input_tokens on padded English tickets (about 3.6 chars
+    per token including JSON punctuation); words * 1.3 under-counted by ~1.5x."""
+    return int(len(text) / 3.6) + 1
 
 
 def canary_for(task_id: str, secret: str = "s1b-canary-v1") -> str:

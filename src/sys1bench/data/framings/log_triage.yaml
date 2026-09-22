@@ -1,0 +1,20 @@
+logs.severity:
+  paraphrases:
+    - "How severe is this log record? 0 for INFO, 1 for WARN, 2 for ERROR, 3 for CRITICAL."
+    - "Map the record's level to severity: INFO→0, WARN→1, ERROR→2, CRITICAL→3."
+    - "Using the level field only, rate severity from 0 (informational) to 3 (outage or data loss)."
+logs.owning_team:
+  paraphrases:
+    - "Look up `log.service` in `team_directory` and return the owning team."
+    - "Which team is responsible for the service that emitted this record, according to the directory?"
+    - "Route this alert to the team that owns the service."
+  criteria_variants:
+    label_only: true
+    vague: true
+logs.page_oncall:
+  paraphrases:
+    - "Should on-call be paged? Apply `paging_policy` (severity 2 or higher and production only)."
+    - "Does this record meet the paging policy: production environment and severity at least 2?"
+    - "Page now: yes or no, per the stated policy?"
+  negations:
+    - "Per `paging_policy`, is it correct NOT to page the on-call engineer for this record?"

@@ -9,8 +9,10 @@ combines two fields. Distractors are irrelevant keys with plausible values.
 
 from __future__ import annotations
 
+import json
+
 from ..schemas import Controls, LabelProvenance, Level, Option, Question, TaskItem
-from .base import BaseGenerator, canary_for, pad_to_tokens, register_generator
+from .base import BaseGenerator, canary_for, estimate_tokens, pad_to_tokens, register_generator
 
 SERVICES = {"checkout-api": "payments", "ledger": "payments", "search-indexer": "discovery", "ranker": "discovery", "auth-gateway": "identity",
             "session-store": "identity", "notify-worker": "messaging", "mailer": "messaging", "cdn-edge": "platform", "k8s-autoscaler": "platform"}
@@ -74,7 +76,7 @@ class LogTriageGenerator(BaseGenerator):
             tid = f"logs_{kb.seed}_{i:05d}"
             items.append(TaskItem(
                 task_id=tid, tier="G", domain="log_triage", language=kb.language, state=state,
-                state_tokens=int(len(str(state).split()) * 1.6),
+                state_tokens=estimate_tokens(json.dumps(state)),
                 questions={
                     "severity": Question(type="score", instructions=SEV_INSTR, criteria=SEV, ground_truth=sev, framing_group="logs.severity"),
                     "owning_team": Question(type="choice", instructions="Which team owns the service in `log.service`? Use `team_directory`.",

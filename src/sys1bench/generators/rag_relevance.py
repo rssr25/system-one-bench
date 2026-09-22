@@ -12,10 +12,11 @@ exact by construction, so this is the cardinality sweep generator for Suite C (K
 
 from __future__ import annotations
 
+import json
 import random
 
 from ..schemas import Controls, LabelProvenance, Level, Option, Question, TaskItem
-from .base import BaseGenerator, canary_for, pad_to_tokens, register_generator
+from .base import BaseGenerator, canary_for, estimate_tokens, pad_to_tokens, register_generator
 
 TOPICS = {
     "planets": (["Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"],
@@ -99,7 +100,7 @@ class RagRelevanceGenerator(BaseGenerator):
             tid = f"rag_{kb.seed}_K{K}_{i:05d}"
             items.append(TaskItem(
                 task_id=tid, tier="G", domain="rag_relevance", language=kb.language, state=state,
-                state_tokens=int(sum(len(t.split()) for t, _ in passages) * 1.3) + 30,
+                state_tokens=estimate_tokens(json.dumps(state)),
                 questions={
                     "best_passage": Question(type="choice", instructions="Which passage in `passages` directly answers `query`?",
                                              criteria=[Option(key=pid, description="") for pid in ids], ground_truth=gold_id, framing_group="rag.best_passage"),

@@ -1,0 +1,18 @@
+policy.compliant:
+  paraphrases:
+    - "Does the request comply with every clause of the policy?"
+    - "Can an agent do what the customer asks without breaking any listed rule?"
+    - "Is this request allowed under `policy`?"
+  negations:
+    - "Would fulfilling `customer_request` violate at least one clause of `policy`?"
+policy.violated_clause:
+  paraphrases:
+    - "Identify the clause that the request breaks, or none."
+    - "If the agent granted this request, which policy clause would be violated? Pick none when it complies."
+    - "Match the request against the policy clauses; return the violated one or none."
+  criteria_variants:
+    label_only: true
+policy.severity:
+  paraphrases:
+    - "How serious is the violation? 0 none, 1 a clause tagged minor, 2 a clause tagged major."
+    - "Severity of the policy breach per the minor/major tags; 0 if compliant."

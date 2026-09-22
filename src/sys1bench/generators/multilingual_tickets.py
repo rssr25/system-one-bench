@@ -6,7 +6,7 @@ router and for Jev's language behaviour; scripts other than Latin are the collap
 from __future__ import annotations
 
 from ..schemas import Controls, LabelProvenance, Option, Question, TaskItem
-from .base import BaseGenerator, canary_for, register_generator
+from .base import BaseGenerator, canary_for, estimate_tokens, register_generator
 from .support_tickets import PRIORITY_INSTRUCTIONS, PRIORITY_LEVELS, QUEUES
 
 # queue, base urgency, {lang: template}
@@ -65,7 +65,7 @@ class MultilingualTicketsGenerator(BaseGenerator):
             priority = min(4, base + (1 if angry else 0) + (1 if tier in ("gold", "enterprise") else 0))
             tid = f"mltickets_{kb.seed}_{lang}_{i:05d}"
             items.append(TaskItem(
-                task_id=tid, tier="G", domain="support_triage", language=lang, state=state, state_tokens=int(len(state.split()) * 2.0),
+                task_id=tid, tier="G", domain="support_triage", language=lang, state=state, state_tokens=estimate_tokens(state),
                 questions={
                     "queue": Question(type="choice", instructions="Which queue should handle this ticket?", criteria=[Option(key=k, description=d) for k, d in queues],
                                       ground_truth=queue, framing_group="tickets.queue"),
