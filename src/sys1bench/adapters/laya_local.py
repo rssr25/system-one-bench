@@ -157,8 +157,11 @@ class LayaLocalAdapter(BaseAdapter):
         try:
             out = router.predict(request.state, vq, model=model)
         except Exception as e:
+            # laya raises ValueError("... options exceed head_max_len=N") when the option strings do not fit the budget:
+            # that is the model refusing the request, not a harness bug, so it is classified like a vendor 4xx.
+            kind = "rejected_by_model" if isinstance(e, ValueError) else "adapter_exception"
             return DecisionResponse(
-                answers={k: Answer.failed(q, "adapter_exception") for k, q in request.questions.items()},
+                answers={k: Answer.failed(q, kind) for k, q in request.questions.items()},
                 latency=LatencyRecord(client_ms=float("nan"), timestamp=time.time()),
                 provider=ProviderRecord(adapter_id=self.adapter_id, model_id_requested=self.model_id, hardware=self.hardware),
                 transport_error=repr(e)[:500])
