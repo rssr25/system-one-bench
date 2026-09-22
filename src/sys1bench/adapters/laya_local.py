@@ -167,8 +167,16 @@ class LayaLocalAdapter(BaseAdapter):
                 transport_error=repr(e)[:500])
         ms = (time.perf_counter() - t0) * 1000
         raw_answers = out.get("answers", {}) if isinstance(out, dict) else {}
-        answers = {k: (parse_answer(q, raw_answers[k], self.abstain_threshold) if isinstance(raw_answers.get(k), dict)
-                       else Answer.failed(q, "missing answer")) for k, q in request.questions.items()}
+        # laya truncates silently to max_len - head_max_len state tokens and reports nothing; estimate it (~4 chars/token)
+        est_tokens = len(request.state_text()) / 4
+        truncated = bool(out.get("truncated", False)) if isinstance(out, dict) else False
+        truncated = truncated or est_tokens > (self.max_len - self.head_max_len)
+        answers = {}
+        for k, q in request.questions.items():
+            a = parse_answer(q, raw_answers[k], self.abstain_threshold) if isinstance(raw_answers.get(k), dict) else Answer.failed(q, "missing answer")
+            if a.ok and truncated:
+                a = a.model_copy(update={"truncated": True})
+            answers[k] = a
         routing = out.get("routing", {}) if isinstance(out, dict) else {}
         usage = out.get("usage", {}) if isinstance(out, dict) else {}
         return DecisionResponse(
