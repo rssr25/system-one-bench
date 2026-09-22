@@ -13,6 +13,11 @@ from ..schemas import Answer, DecisionRequest, DecisionResponse, ModelCapabiliti
 _REGISTRY: dict[str, type[BaseAdapter]] = {}
 
 
+class FatalAdapterError(RuntimeError):
+    """Raised when an adapter cannot produce valid measurements at all (e.g. a local model refused to load on the
+    requested device). The runner does not swallow it: the run aborts so an orchestrator can retry or fail loudly."""
+
+
 def register(adapter_id: str) -> Callable[[type[BaseAdapter]], type[BaseAdapter]]:
     def deco(cls: type[BaseAdapter]) -> type[BaseAdapter]:
         cls.adapter_id = adapter_id

@@ -25,7 +25,7 @@ import time
 from typing import Any
 
 from ..schemas import Answer, DecisionRequest, DecisionResponse, LatencyRecord, ModelCapabilities, ProviderRecord, Question
-from .base import BaseAdapter, finalize_answer, register
+from .base import BaseAdapter, FatalAdapterError, finalize_answer, register
 
 CHECKPOINTS = {"english": ("convaiinnovations/laya", 512, 192), "multilingual": ("convaiinnovations/laya/multilingual", 1024, 256),
                "typed-decisions": ("convaiinnovations/laya/typed-decisions", 1024, 256), "router": ("convaiinnovations/laya", 1024, 256)}
@@ -108,11 +108,11 @@ class LayaLocalAdapter(BaseAdapter):
         # Lazy router: load only the checkpoint we evaluate (preloading all three needs ~6 GB and, on a shared GPU,
         # silently lands on CPU). "router" mode keeps the full preload because it dispatches per language.
         if self.checkpoint == "router":
-            self._router = Router(preload=True, device=self.device)
-            agents = list((getattr(self._router, "_agents", {}) or {}).values())
+            router = Router(preload=True, device=self.device)
+            agents = list((getattr(router, "_agents", {}) or {}).values())
         else:
-            self._router = Router(preload=False, device=self.device)
-            agents = [self._router.load(self.checkpoint)]
+            router = Router(preload=False, device=self.device)
+            agents = [router.load(self.checkpoint)]
         for ag in agents:
             if hasattr(ag, "cfg"):
                 ag.cfg["head_max_len"] = self.head_max_len
@@ -128,8 +128,9 @@ class LayaLocalAdapter(BaseAdapter):
                     pass
             dev = str(getattr(ag, "device", ""))
             if self.device.startswith("cuda") and "cuda" not in dev and self.strict_device:
-                raise RuntimeError(f"Laya checkpoint {self.checkpoint!r} loaded on {dev or 'cpu'} although device={self.device!r} was requested; "
-                                   "refusing to record CPU latency as GPU. Free GPU memory or pass strict_device=false.")
+                del router, agents  # release the half-loaded model before aborting
+                raise FatalAdapterError(f"Laya checkpoint {self.checkpoint!r} loaded on {dev or 'cpu'} although device={self.device!r} was requested; "
+                                        "refusing to record CPU latency as GPU. Free GPU memory or pass strict_device=false.")
         ag = agents[0] if agents else None
         dev = str(getattr(ag, "device", self.device)) if ag is not None else self.device
         if self.hardware is None:
@@ -142,6 +143,7 @@ class LayaLocalAdapter(BaseAdapter):
             except Exception:  # pragma: no cover
                 pass
             self.hardware = f"{gpu} ({dev})" if gpu else f"CPU {platform.machine()} ({dev})"
+        self._router = router  # only after every check passed
         return self._router
 
     def parse_raw_answer(self, q: Question, payload: dict) -> Answer:

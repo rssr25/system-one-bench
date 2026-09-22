@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from ..adapters.base import BaseAdapter
+from ..adapters.base import BaseAdapter, FatalAdapterError
 from ..schemas import DecisionRequest, PredictionRow, RequestMeta, TaskItem
 from .cache import ResponseCache
 
@@ -116,6 +116,8 @@ def run_items(items: list[TaskItem], adapter: BaseAdapter, cache: ResponseCache 
         if resp is None:
             try:
                 resp = adapter.decide(req)
+            except FatalAdapterError:
+                raise
             except Exception as e:  # adapter bug or hard failure: record, don't crash
                 from ..schemas import Answer, DecisionResponse, LatencyRecord, ProviderRecord
 

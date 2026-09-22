@@ -230,3 +230,16 @@ def test_scorecard_dedupes_repeated_sibling_rows():
     assert len(angry) > 30 * 6  # raw rows include duplicates from queue criteria variants
     c = scorecard(angry, floor_resamples=10)
     assert c["calibration"]["n"] == 30
+
+
+def test_fatal_adapter_error_is_not_swallowed():
+    from sys1bench.adapters.base import FatalAdapterError
+    from sys1bench.adapters.mock import MockAdapter
+
+    class Broken(MockAdapter):
+        def decide(self, request):
+            raise FatalAdapterError("device unavailable")
+
+    items = get_generator("support_tickets", n=2, seed=1).generate()
+    with pytest.raises(FatalAdapterError):
+        run_items(items, Broken())
