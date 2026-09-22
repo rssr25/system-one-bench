@@ -346,5 +346,37 @@ def hybrid_sweep(primary_preds: Path, fallback_preds: Path, out: Path, threshold
         typer.echo(f"t={t:<5} esc={v['escalation_rate']:.2f} acc={v['accuracy']:.3f} p50={v['p50_ms']:.0f}ms cost/100k=${v['cost_per_100k']:.2f}")
 
 
+
+@app.command()
+def suite(which: str, out: Path, adapter: Optional[str] = None, model: Optional[str] = None, config: Optional[Path] = None,
+          n: int = 500, seed: int = 42, perms: int = 3, concurrency: int = 1, generators: str = "support_tickets,phishing_email",
+          manifests_from: Optional[Path] = None, budget: bool = False, sweeps_out: Optional[Path] = None):
+    """Run a suite (A, C, D, E, F, G, I or `all`) into OUT; sweeps go to SWEEPS_OUT (default OUT_sweeps). Portable replacement for scripts/."""
+    from .runners import suite as S
+
+    ad = _adapter_from(adapter, model, str(config) if config else None)
+    sw = sweeps_out or out.parent / f"{out.name}_sweeps"
+    which = which.upper()
+    todo = ["A", "C", "D", "E", "G", "F", "I"] if which == "ALL" else list(which)
+    for s in todo:
+        if s == "A":
+            S.suite_a(ad, out, n=n, seed=seed, perms=perms, generators=tuple(generators.split(",")), concurrency=concurrency, manifests_from=manifests_from, log=typer.echo)
+        elif s == "C":
+            S.suite_c(ad, sw, n=min(n, 150), seed=seed, concurrency=concurrency, budget=budget, log=typer.echo)
+        elif s == "D":
+            S.suite_d(ad, sw, n=min(n, 200), seed=seed, concurrency=concurrency, log=typer.echo)
+        elif s == "E":
+            S.suite_e(ad, sw, out / "tickets.jsonl", n=n, concurrency=concurrency, log=typer.echo)
+        elif s == "G":
+            S.suite_g(ad, sw, out / "tickets.jsonl", out / "phish.jsonl", n=n, concurrency=concurrency, log=typer.echo)
+        elif s == "F":
+            S.suite_f(ad, sw, concurrency=concurrency, log=typer.echo)
+        elif s == "I":
+            S.suite_i(out, sw, log=typer.echo)
+        else:
+            raise typer.BadParameter(f"unknown suite {s!r}")
+    typer.echo(f"done: {which} -> {out} (sweeps: {sw})")
+
+
 if __name__ == "__main__":
     app()

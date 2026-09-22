@@ -273,3 +273,15 @@ def test_suites_g_i_f_hybrid_offline(tmp_path):
     assert any(q.framing_id.startswith("adv") for r in exp for q in r.questions.values())
     card = scorecard([r for r in run_items(exp, m, arm="main") if r.question_key == "priority"], floor_resamples=5)
     assert card["framing"]["n_adversarial"] >= 3
+
+
+def test_suite_command_offline(tmp_path):
+    from typer.testing import CliRunner
+
+    from sys1bench.cli import app
+
+    r = CliRunner().invoke(app, ["suite", "AEFGI", str(tmp_path / "m"), "--adapter", "mock", "--n", "20", "--perms", "1"])
+    assert r.exit_code == 0, r.output[-800:]
+    assert (tmp_path / "m" / "preds_tickets.jsonl").exists() and (tmp_path / "m" / "preds_noisy.jsonl").exists()
+    assert (tmp_path / "m_sweeps" / "interference_queue.json").exists() and (tmp_path / "m_sweeps" / "noul_is_angry.json").exists()
+    assert (tmp_path / "m_sweeps" / "ordinal_probes.json").exists() and (tmp_path / "m_sweeps" / "decision_value_tickets.json").exists()
