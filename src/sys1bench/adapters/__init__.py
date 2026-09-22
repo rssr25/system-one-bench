@@ -14,6 +14,6 @@ from . import (  # noqa: F401
 from .base import BaseAdapter, get_adapter, list_adapters, register  # noqa: F401
 
 try:  # optional heavy deps
-    from . import embed_knn, llm_constrained, nli_zeroshot  # noqa: F401
+    from . import embed_knn, encoder_finetuned, llm_constrained, nli_zeroshot  # noqa: F401
 except Exception:  # pragma: no cover
     pass

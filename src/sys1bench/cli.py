@@ -200,14 +200,45 @@ def interference(manifest: Path, out: Path, target: str = "queue", adapter: Opti
 
 
 @app.command()
-def report(results_dir: Path, out: Optional[Path] = None, title: str = "sys1bench results"):
-    """Build the markdown results report for one or more model result directories (hosted and local kept apart)."""
+def report(results_dir: Path, out: Optional[Path] = None, title: str = "sys1bench results", latex: Optional[Path] = None,
+           html: Optional[Path] = None):
+    """Build the markdown results report (hosted and local kept apart); optionally LaTeX headline tables and an HTML dashboard."""
     from .report.results_doc import build_report
 
-    md = build_report([results_dir] if (results_dir / "preds_tickets.jsonl").exists() else sorted(p for p in results_dir.iterdir() if p.is_dir()), title=title)
+    dirs = [results_dir] if (results_dir / "preds_tickets.jsonl").exists() else sorted(p for p in results_dir.iterdir() if p.is_dir() and not p.name.startswith("_"))
+    md = build_report(dirs, title=title)
     out = out or (results_dir / "REPORT.md")
     out.write_text(md)
     typer.echo(f"wrote {out}")
+    if latex:
+        from .report.latex import latex_table
+        from .report.results_doc import _load_dir, _main_rows
+        from .report.scorecard import group_rows, scorecard
+
+        parts = []
+        for d in dirs:
+            data = _load_dir(d)
+            if not data["preds"]:
+                continue
+            cards = {}
+            model = None
+            for mname in ("tickets", "phish"):
+                for (qk,), rs in sorted(group_rows(_main_rows(data["preds"].get(mname, [])), "question_key").items()):
+                    if qk.startswith("sub_"):
+                        continue
+                    c = scorecard(rs, floor_resamples=50)
+                    c["primitive"] = rs[0].primitive
+                    cards[f"{mname}.{qk}"] = c
+                    model = rs[0].model_id
+            if cards:
+                parts.append(latex_table(cards, f"{model}: sys1bench Suite A headline metrics (median over framings; ECE relative to noise floor).", f"tab:{d.name}"))
+        latex.write_text("\n\n".join(parts))
+        typer.echo(f"wrote {latex}")
+    if html:
+        from .report.dashboard import build_dashboard
+
+        html.write_text(build_dashboard(dirs, title=title))
+        typer.echo(f"wrote {html}")
 
 
 @app.command()
@@ -256,6 +287,27 @@ def plots(results_dir: Path, out: Optional[Path] = None, questions: str = "ticke
         risk_coverage_plot(by_model, out / f"risk_coverage_{mname}_{qk}.png", title=f"{mname}.{qk}: risk-coverage")
         framing_range_plot(acc_by_model, out / f"framing_{mname}_{qk}.png", title=f"{mname}.{qk}: accuracy across framings")
         typer.echo(f"{spec}: {len(by_model)} models")
+    # sweep figures for every *_sweeps dir (or the dir itself)
+    from .report.plots import interference_heatmap, scaling_plot
+
+    sweep_dirs = [results_dir] if any(results_dir.glob("cardinality_*.json")) else sorted(p for p in results_dir.iterdir() if p.is_dir() and any(p.glob("*.json")))
+    for sd in sweep_dirs:
+        tag = sd.name.replace("_sweeps", "")
+        for f in sd.glob("interference_*.json"):
+            res = json.loads(f.read_text())
+            res["by_kind"] = {k: {int(q): v for q, v in d.items()} for k, d in res["by_kind"].items()}
+            interference_heatmap(res, out / f"interference_{tag}_{res['target']}.png", title=f"{tag}: JSD of `{res['target']}` vs asked alone")
+        for f in sd.glob("cardinality_*.json"):
+            res = {int(k): v for k, v in json.loads(f.read_text()).items()}
+            scaling_plot(res, out / f"cardinality_{tag}_acc.png", "options K", "accuracy", f"{tag}: accuracy vs K")
+            scaling_plot(res, out / f"cardinality_{tag}_ece.png", "options K", "ece_over_floor", f"{tag}: ECE/floor vs K")
+        for f in sd.glob("budget_*.json"):
+            res = {int(k): v for k, v in json.loads(f.read_text()).items()}
+            scaling_plot(res, out / f"budget_{tag}_acc.png", "head_max_len (tokens for all options)", "accuracy", f"{tag}: accuracy vs option budget")
+        for f in sd.glob("length_*.json"):
+            res = {int(k): {"accuracy": v["by_question"].get("priority", v["by_question"][next(iter(v["by_question"]))]).get("accuracy", float("nan"))}
+                   for k, v in json.loads(f.read_text()).items()}
+            scaling_plot(res, out / f"length_{tag}_priority_acc.png", "state tokens (target)", "accuracy", f"{tag}: priority accuracy vs state length")
     typer.echo(f"plots in {out}")
 
 

@@ -285,3 +285,20 @@ def test_suite_command_offline(tmp_path):
     assert (tmp_path / "m" / "preds_tickets.jsonl").exists() and (tmp_path / "m" / "preds_noisy.jsonl").exists()
     assert (tmp_path / "m_sweeps" / "interference_queue.json").exists() and (tmp_path / "m_sweeps" / "noul_is_angry.json").exists()
     assert (tmp_path / "m_sweeps" / "ordinal_probes.json").exists() and (tmp_path / "m_sweeps" / "decision_value_tickets.json").exists()
+
+
+def test_dashboard_and_latex_build(tmp_path):
+    from sys1bench.report.dashboard import build_dashboard
+    from sys1bench.report.latex import latex_table
+    from sys1bench.runners import write_manifest, write_predictions
+
+    items = get_generator("support_tickets", n=30, seed=3).generate()
+    d = tmp_path / "mock"
+    d.mkdir()
+    write_manifest(items, d / "tickets.jsonl")
+    rows = run_items(expand_framings(items, load_framings(framings_path("support_tickets"))), get_adapter("mock", skill=0.8), arm="main")
+    write_predictions(rows, d / "preds_tickets.jsonl")
+    html = build_dashboard([d])
+    assert "<canvas" in html and "mock-v1" in html and "NaN" not in html
+    tex = latex_table({"tickets.queue": {"primitive": "choice", "accuracy": 0.8, "accuracy_range": [0.7, 0.9]}}, "cap", "tab:x")
+    assert r"\begin{table}" in tex and "0.800" in tex
