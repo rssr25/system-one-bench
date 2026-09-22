@@ -18,7 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 local = ["torch>=2.4", "transformers>=4.45", "sentence-transformers>=3.0"]
 llm = ["vllm>=0.6", "outlines>=0.1"]
-dev = ["pytest>=8.0", "ruff>=0.6"]
+dev = ["pytest>=8.0", "ruff>=0.6", "matplotlib>=3.8"]
 
 [project.scripts]
 sys1bench = "sys1bench.cli:app"

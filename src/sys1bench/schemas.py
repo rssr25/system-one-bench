@@ -227,8 +227,7 @@ class Answer(BaseModel):
 
     @staticmethod
     def failed(q: Question, error: str) -> Answer:
-        n = q.cardinality
-        return Answer(type=q.type, option_keys=q.option_keys, probs=[float("nan")] * n, argmax="", error=error)
+        return Answer(type=q.type, option_keys=q.option_keys, probs=[], argmax="", error=error)
 
 
 class DecisionResponse(BaseModel):
