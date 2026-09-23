@@ -92,7 +92,7 @@ def framing_range_plot(acc_by_model_framing: dict[str, dict[str, float]], out: P
             ax.plot(v, i, marker="o" if f == "f0" else ".", color="#c33" if f == "f0" else "#333", ms=7 if f == "f0" else 5)
     ax.set_yticks(range(len(models)))
     ax.set_yticklabels(models, fontsize=8)
-    ax.set_xlabel("accuracy (red = canonical framing, dots = paraphrases / criteria variants)")
+    ax.set_xlabel("accuracy  (red: canonical wording; dots: paraphrases and criteria variants)", fontsize=8)
     ax.set_title(title, fontsize=10)
     ax.set_xlim(0, 1.02)
     fig.tight_layout()

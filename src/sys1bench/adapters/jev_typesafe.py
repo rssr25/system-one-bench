@@ -105,6 +105,7 @@ class JevTypeSafeAdapter(BaseAdapter):
                                     "in the working directory. Keys: https://typesafe.ai")
         self._client = httpx.Client(timeout=timeout_s, http2=False)
         self.version_note = version_note
+        self.model_label: str | None = None
         if probe_models:
             try:
                 base = url.split("/v1/")[0]
@@ -117,6 +118,11 @@ class JevTypeSafeAdapter(BaseAdapter):
                 bits += [f"{k}={v}" for k, v in data.items() if k not in ("models", "data") and isinstance(v, (str, int, float))]
                 self.version_note = " ".join(bits)[:200] or version_note
                 self.tunables["server_models"] = self.version_note
+                # a server that only exposes an alias (Kev: "kev-latest") is labelled by the run it reports, so that
+                # several checkpoints behind the same alias do not merge in reports
+                run = mine.get("run") or mine.get("revision")
+                if run and (model_id.endswith("latest") or model_id.endswith("preview")):
+                    self.model_label = str(run).split("/")[-1]
             except Exception as e:  # probing is best effort
                 self.tunables["server_models_error"] = str(e)[:120]
 
@@ -183,7 +189,8 @@ class JevTypeSafeAdapter(BaseAdapter):
         return DecisionResponse(
             answers=answers,
             latency=LatencyRecord(client_ms=ms, route="typesafe", timestamp=time.time()),
-            provider=ProviderRecord(adapter_id=self.adapter_id, model_id_requested=self.model_id, model_id_returned=data.get("model"),
+            provider=ProviderRecord(adapter_id=self.adapter_id, model_id_requested=self.model_id,
+                                    model_id_returned=self.model_label or data.get("model"),
                                     version_hash=(str(data.get("model") or self.model_id) + (f" | {self.version_note}" if self.version_note else "")),
                                     generation_id=headers.get("x-request-id") or headers.get("x-typesafe-request-id") or headers.get("request-id"),
                                     route="typesafe" if self.url == DEFAULT_URL else self.url, hardware=self.hardware,
