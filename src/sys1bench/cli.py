@@ -295,7 +295,8 @@ def robustness(out: Path, adapter: Optional[str] = None, model: Optional[str] = 
 
 
 @app.command()
-def plots(results_dir: Path, out: Optional[Path] = None, questions: str = "tickets.queue,tickets.is_angry,tickets.priority,phish.is_phishing,phish.attack_class,phish.urgency"):
+def plots(results_dir: Path, out: Optional[Path] = None, questions: str = "tickets.queue,tickets.is_angry,tickets.priority,phish.is_phishing,phish.attack_class,phish.urgency",
+          include: Optional[str] = typer.Option(None, help="comma-separated substrings; only model ids matching one of them are drawn")):
     """Render reliability diagrams, risk-coverage curves and framing-range charts for every model dir under results_dir."""
     from .report.plots import framing_range_plot, reliability_diagram, risk_coverage_plot
     from .report.scorecard import framing_scorecard
@@ -315,6 +316,8 @@ def plots(results_dir: Path, out: Optional[Path] = None, questions: str = "ticke
             if not rows:
                 continue
             label = rows[0].model_id
+            if include and not any(tok.strip().lower() in label.lower() for tok in include.split(",")):
+                continue
             by_model[label] = [r for r in rows if r.permutation_id == "p0" and r.framing_id == "f0"]
             acc_by_model[label] = framing_scorecard(rows)["accuracy_by_framing"]
         if not by_model:
