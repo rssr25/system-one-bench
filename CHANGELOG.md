@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2 (2026-09-23)
+
+- The TypeSafe adapter serves any API-compatible server: `url`, `api_key`, `allow_alias`, `deployment`, and a
+  `/v1/models` version probe recorded on every row. Packaged configs `kev_0.8b`, `kev_4b`, `kev_9b` for
+  [Kev](https://github.com/jaredpalmer/kev); Kev-0.8B/4B/9B benchmarked on the same manifests as Jev and Laya.
+- README with results figures across models; `multi_line_plot` for cross-model sweep charts.
+- Publish workflow skips files that already exist on PyPI.
+
 ## 0.3.1 (2026-09-22)
 
 - CLI fails fast with a clear message when no TypeSafe key is found, when the key is rejected (401/403), when a

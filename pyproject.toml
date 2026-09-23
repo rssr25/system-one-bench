@@ -1,6 +1,6 @@
 [project]
 name = "sys1bench"
-version = "0.3.1"
+version = "0.3.2"
 description = "Benchmark harness for typed System One decision models (choice / score / noul): calibration vs noise floor, framing sensitivity, selective prediction, ordinal fidelity, interference, robustness."
 readme = "README.md"
 requires-python = ">=3.11"

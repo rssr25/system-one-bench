@@ -33,7 +33,7 @@ sys1bench report results --html results/dashboard.html            # tables + int
   <img src="docs/figures/latency_vs_questions.png" alt="Median latency versus number of questions per request" width="45%">
 </p>
 
-<p align="center"><sub>Jev 1.13.0 (hosted) and Laya 0.3.4 (local, GB10) on identical generated manifests, n = 500, September 2026. Left to right: accuracy across five paraphrases and criteria variants of the same question (red = canonical wording); reliability on the same question; accuracy as the option count grows from 2 to 255; median latency as more questions share one request. Hosted latency includes the network path and is not comparable to local compute time.</sub></p>
+<p align="center"><sub>Jev 1.13.0 (hosted), Laya 0.3.4 and Kev 0.8B / 4B / 9B (local, GB10) on identical generated manifests, n = 500, September 2026. Left to right: accuracy across five paraphrases and criteria variants of the same question (red = canonical wording); reliability on the same question; accuracy as the option count grows from 2 to 255; median latency as more questions share one request. Hosted latency includes the network path and is not comparable to local compute time.</sub></p>
 
 ## Why this benchmark
 
