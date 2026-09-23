@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Daily drift check for hosted models. Appends one line per run to results/canary/history.jsonl and redraws the drift
-# curve. Cron example (09:00 daily):  0 9 * * * cd /path/to/system-one-bench && scripts/canary_daily.sh
+# curve. Cron example (09:00 daily):  0 9 * * * cd /path/to/sys1bench && scripts/canary_daily.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
 source .venv/bin/activate 2>/dev/null || true

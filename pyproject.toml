@@ -39,10 +39,10 @@ llm = ["vllm>=0.6", "outlines>=0.1"]
 dev = ["pytest>=8.0", "ruff>=0.6", "matplotlib>=3.8", "build>=1.2", "twine>=5.0"]
 
 [project.urls]
-Homepage = "https://github.com/rssr25/system-one-bench"
-Documentation = "https://github.com/rssr25/system-one-bench/blob/main/docs/SPEC_v2.md"
-Issues = "https://github.com/rssr25/system-one-bench/issues"
-Changelog = "https://github.com/rssr25/system-one-bench/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/rssr25/sys1bench"
+Documentation = "https://github.com/rssr25/sys1bench/blob/main/docs/SPEC_v2.md"
+Issues = "https://github.com/rssr25/sys1bench/issues"
+Changelog = "https://github.com/rssr25/sys1bench/blob/main/CHANGELOG.md"
 
 [project.scripts]
 sys1bench = "sys1bench.cli:app"
